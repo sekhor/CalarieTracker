@@ -55,7 +55,7 @@ let mssqlConfig = {
   options: {
     encrypt: process.env.MSSQL_ENCRYPT === 'true',
     trustServerCertificate: process.env.MSSQL_TRUST_CERT !== 'false',
-    connectTimeout: 5000,
+    connectTimeout: 50000,
   },
 };
 
