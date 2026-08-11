@@ -8,7 +8,7 @@ const dashboardRouter = require('./routes/dashboard');
 const settingsRouter = require('./routes/settings');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 
 // Enable CORS and JSON parsing
 app.use(cors());
