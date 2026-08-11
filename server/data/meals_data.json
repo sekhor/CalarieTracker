@@ -1,0 +1,38 @@
+{
+  "meals": [
+    {
+      "id": 1,
+      "meal_name": "Salmon & Quinoa Bowl",
+      "meal_type": "Lunch",
+      "calories": 560,
+      "protein_g": 42,
+      "carbs_g": 38,
+      "fat_g": 22,
+      "image_url": null,
+      "notes": "High protein clean lunch",
+      "logged_at": "2026-08-10T05:15:32.290Z",
+      "created_at": "2026-08-10T05:15:32.290Z"
+    },
+    {
+      "id": 2,
+      "meal_name": "Avocado Toast with Poached Eggs",
+      "meal_type": "Breakfast",
+      "calories": 420,
+      "protein_g": 19,
+      "carbs_g": 32,
+      "fat_g": 24,
+      "image_url": "/uploads/meal-1786411300023-195402544.jpeg",
+      "notes": "Nutrient-dense breakfast providing clean energy and healthy fats.",
+      "logged_at": "2026-08-11T01:22:04.118Z",
+      "created_at": "2026-08-11T01:22:04.198Z"
+    }
+  ],
+  "user_settings": {
+    "daily_goals": {
+      "daily_calorie_target": 2000,
+      "protein_target_g": 140,
+      "carbs_target_g": 225,
+      "fat_target_g": 65
+    }
+  }
+}
