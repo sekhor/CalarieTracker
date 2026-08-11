@@ -12,7 +12,7 @@ const getApiUrl = () => {
   // Default to production URL
   return 'https://calarie-abf2fagwc6fnbjfr.southeastasia-01.azurewebsites.netapi';
 };
-const API_BASE_URL = getApiUrl();
+ API_BASE_URL = getApiUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
