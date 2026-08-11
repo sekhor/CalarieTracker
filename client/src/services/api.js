@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:5000/api';
-const API_URL = getApiUrl();
+
 const getApiUrl = () => {
   const hostname = window.location.hostname;
   if (hostname === 'localhost') {
@@ -12,6 +12,7 @@ const getApiUrl = () => {
   // Default to production URL
   return 'https://calarie-abf2fagwc6fnbjfr.southeastasia-01.azurewebsites.netapi';
 };
+const API_URL = getApiUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
