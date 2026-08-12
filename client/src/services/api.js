@@ -10,7 +10,7 @@ const getApiUrl = () => {
     return 'https://calarie-abf2fagwc6fnbjfr.southeastasia-01.azurewebsites.net/api';
   }
   // Default to production URL
-  return 'https://calarie-abf2fagwc6fnbjfr.southeastasia-01.azurewebsites.netapi';
+  return '/calarie-api-faedf7akcfdrgtdf.southeastasia-01.azurewebsites.net/api';
 };
  const API_BASE_URL = getApiUrl();
 
