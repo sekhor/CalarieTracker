@@ -22,12 +22,14 @@ router.get('/', async (req, res) => {
   try {
     const { search, meal_type, from_date, to_date, limit = 100 } = req.query;
     const engine = getEngine();
+    const userId = req.user.id;
 
     if (engine === 'mssql') {
       const pool = getMssqlPool();
-      let query = `SELECT TOP (@limit) * FROM Meals WHERE 1=1`;
+      let query = `SELECT TOP (@limit) * FROM Meals WHERE user_id = @user_id`;
       const request = pool.request();
       request.input('limit', sql.Int, parseInt(limit, 10));
+      request.input('user_id', sql.Int, userId);
 
       if (search) {
         query += ` AND (meal_name LIKE @search OR notes LIKE @search)`;
@@ -52,7 +54,7 @@ router.get('/', async (req, res) => {
     } else {
       // Local Fallback
       const store = getLocalStore();
-      let meals = [...store.meals];
+      let meals = [...store.meals].filter((meal) => String(meal.user_id) === String(userId));
 
       if (search) {
         const q = search.toLowerCase();
@@ -110,10 +112,12 @@ router.post('/', async (req, res) => {
     }
 
     const engine = getEngine();
+    const userId = req.user.id;
 
     if (engine === 'mssql') {
       const pool = getMssqlPool();
       const result = await pool.request()
+        .input('user_id', sql.Int, userId)
         .input('meal_name', sql.NVarChar, meal_name)
         .input('meal_type', sql.NVarChar, meal_type)
         .input('calories', sql.Int, parseInt(calories, 10))
@@ -126,9 +130,9 @@ router.post('/', async (req, res) => {
         .input('notes', sql.NVarChar, notes)
         .input('logged_at', sql.DateTime2, new Date(logged_at))
         .query(`
-          INSERT INTO Meals (meal_name, meal_type, calories, protein_g, carbs_g, fat_g, image_url, image_data, image_mime_type, notes, logged_at)
+          INSERT INTO Meals (user_id, meal_name, meal_type, calories, protein_g, carbs_g, fat_g, image_url, image_data, image_mime_type, notes, logged_at)
           OUTPUT INSERTED.*
-          VALUES (@meal_name, @meal_type, @calories, @protein_g, @carbs_g, @fat_g, @image_url, @image_data, @image_mime_type, @notes, @logged_at)
+          VALUES (@user_id, @meal_name, @meal_type, @calories, @protein_g, @carbs_g, @fat_g, @image_url, @image_data, @image_mime_type, @notes, @logged_at)
         `);
 
       return res.status(201).json({ meal: toMealResponse(result.recordset[0]), engine: 'mssql' });
@@ -138,6 +142,7 @@ router.post('/', async (req, res) => {
       
       const newMeal = {
         id: newId,
+        user_id: userId,
         meal_name,
         meal_type,
         calories: parseInt(calories, 10),
@@ -169,6 +174,7 @@ router.put('/:id', async (req, res) => {
     const mealId = req.params.id;
     const { meal_name, meal_type, calories, protein_g, carbs_g, fat_g, image_url, image_base64, image_mime_type, notes, logged_at } = req.body;
     const engine = getEngine();
+    const userId = req.user.id;
 
     let imageBuffer;
     let normalizedImageMimeType = image_mime_type;
@@ -182,6 +188,7 @@ router.put('/:id', async (req, res) => {
       const pool = getMssqlPool();
       const result = await pool.request()
         .input('id', sql.Int, parseInt(mealId, 10))
+        .input('user_id', sql.Int, userId)
         .input('meal_name', sql.NVarChar, meal_name)
         .input('meal_type', sql.NVarChar, meal_type)
         .input('calories', sql.Int, parseInt(calories, 10))
@@ -202,7 +209,7 @@ router.put('/:id', async (req, res) => {
               image_mime_type = COALESCE(@image_mime_type, image_mime_type),
               notes = @notes, logged_at = @logged_at
           OUTPUT INSERTED.*
-          WHERE id = @id
+          WHERE id = @id AND user_id = @user_id
         `);
 
       if (!result.recordset || result.recordset.length === 0) {
@@ -211,7 +218,7 @@ router.put('/:id', async (req, res) => {
       return res.json({ meal: toMealResponse(result.recordset[0]), engine: 'mssql' });
     } else {
       const store = getLocalStore();
-      const index = store.meals.findIndex(m => String(m.id) === String(mealId));
+      const index = store.meals.findIndex(m => String(m.id) === String(mealId) && String(m.user_id) === String(userId));
       if (index === -1) {
         return res.status(404).json({ error: 'Meal record not found' });
       }
@@ -245,17 +252,19 @@ router.delete('/:id', async (req, res) => {
   try {
     const mealId = req.params.id;
     const engine = getEngine();
+    const userId = req.user.id;
 
     if (engine === 'mssql') {
       const pool = getMssqlPool();
       await pool.request()
         .input('id', sql.Int, parseInt(mealId, 10))
-        .query(`DELETE FROM Meals WHERE id = @id`);
+        .input('user_id', sql.Int, userId)
+        .query(`DELETE FROM Meals WHERE id = @id AND user_id = @user_id`);
 
       return res.json({ message: 'Meal deleted successfully', id: mealId, engine: 'mssql' });
     } else {
       const store = getLocalStore();
-      store.meals = store.meals.filter(m => String(m.id) !== String(mealId));
+      store.meals = store.meals.filter(m => !(String(m.id) === String(mealId) && String(m.user_id) === String(userId)));
       saveLocalStore(store);
       return res.json({ message: 'Meal deleted successfully', id: mealId, engine: 'local_fallback' });
     }
@@ -270,12 +279,14 @@ router.get('/:id/photo', async (req, res) => {
   try {
     const mealId = req.params.id;
     const engine = getEngine();
+    const userId = req.user.id;
 
     if (engine === 'mssql') {
       const pool = getMssqlPool();
       const result = await pool.request()
         .input('id', sql.Int, parseInt(mealId, 10))
-        .query(`SELECT id, image_data, image_mime_type FROM Meals WHERE id = @id`);
+        .input('user_id', sql.Int, userId)
+        .query(`SELECT id, image_data, image_mime_type FROM Meals WHERE id = @id AND user_id = @user_id`);
 
       const meal = result.recordset?.[0];
       if (!meal || !meal.image_data) {
@@ -287,7 +298,7 @@ router.get('/:id/photo', async (req, res) => {
     }
 
     const store = getLocalStore();
-    const meal = store.meals.find(m => String(m.id) === String(mealId));
+    const meal = store.meals.find(m => String(m.id) === String(mealId) && String(m.user_id) === String(userId));
     if (!meal || !meal.image_data) {
       return res.status(404).json({ error: 'Meal image not found' });
     }

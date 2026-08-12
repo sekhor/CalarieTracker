@@ -6,9 +6,9 @@ const {
   connectMSSQL,
   getMssqlConfig,
   getMssqlPool,
-  getLocalStore,
-  saveLocalStore,
   getEngine,
+  getUserGoals,
+  saveUserGoals,
 } = require('../config/db');
 const { updateAzureSettings, getAzureSettings } = require('../services/azureOpenAI');
 
@@ -17,31 +17,7 @@ router.get('/', async (req, res) => {
   try {
     const dbStatus = getDbStatus();
     const azureStatus = getAzureSettings();
-    const engine = getEngine();
-
-    let goals = {
-      daily_calorie_target: 2000,
-      protein_target_g: 140,
-      carbs_target_g: 225,
-      fat_target_g: 65,
-    };
-
-    if (engine === 'mssql') {
-      const pool = getMssqlPool();
-      if (pool) {
-        const goalsRes = await pool.request().query(`SELECT setting_value FROM UserSettings WHERE setting_key = 'daily_goals'`);
-        if (goalsRes.recordset && goalsRes.recordset.length > 0) {
-          try {
-            goals = { ...goals, ...JSON.parse(goalsRes.recordset[0].setting_value) };
-          } catch (e) {}
-        }
-      }
-    } else {
-      const store = getLocalStore();
-      if (store.user_settings && store.user_settings.daily_goals) {
-        goals = { ...goals, ...store.user_settings.daily_goals };
-      }
-    }
+    const goals = await getUserGoals(req.user.id);
 
     return res.json({
       database: dbStatus,
@@ -111,25 +87,7 @@ router.post('/goals', async (req, res) => {
       fat_target_g: parseFloat(fat_target_g || 65),
     };
 
-    const engine = getEngine();
-
-    if (engine === 'mssql') {
-      const pool = getMssqlPool();
-      await pool.request()
-        .input('key', sql.NVarChar, 'daily_goals')
-        .input('val', sql.NVarChar, JSON.stringify(goalsObj))
-        .query(`
-          IF EXISTS (SELECT 1 FROM UserSettings WHERE setting_key = @key)
-            UPDATE UserSettings SET setting_value = @val WHERE setting_key = @key
-          ELSE
-            INSERT INTO UserSettings (setting_key, setting_value) VALUES (@key, @val)
-        `);
-    } else {
-      const store = getLocalStore();
-      if (!store.user_settings) store.user_settings = {};
-      store.user_settings.daily_goals = goalsObj;
-      saveLocalStore(store);
-    }
+    await saveUserGoals(req.user.id, goalsObj);
 
     return res.json({ message: 'Goals updated successfully', goals: goalsObj });
   } catch (err) {

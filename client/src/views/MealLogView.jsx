@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Utensils, Search, Trash2, Edit3, Plus } from 'lucide-react';
+import MealPhoto from '../components/MealPhoto';
 
 export default function MealLogView({ meals, onEditMeal, onDeleteMeal, onOpenAddModal }) {
   const [searchTerm, setSearchTerm]   = useState('');
@@ -105,10 +106,7 @@ export default function MealLogView({ meals, onEditMeal, onDeleteMeal, onOpenAdd
 
                 <div className="full-meal-body">
                   <div className="full-meal-thumb">
-                    {meal.image_url
-                      ? <img src={`http://localhost:5000${meal.image_url}`} alt={meal.meal_name} onError={e => { e.target.style.display = 'none'; }} />
-                      : <Utensils size={22} />
-                    }
+                    <MealPhoto imageUrl={meal.image_url} alt={meal.meal_name} />
                   </div>
                   <div>
                     <div className="full-meal-name">{meal.meal_name}</div>

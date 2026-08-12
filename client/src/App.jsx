@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import AddMealModal from './components/AddMealModal';
+import AuthScreen from './components/AuthScreen';
 import DashboardView from './views/DashboardView';
 import AIScannerView from './views/AIScannerView';
 import MealLogView from './views/MealLogView';
@@ -13,15 +14,21 @@ import {
   createMeal,
   updateMeal,
   deleteMeal,
+  clearAuthSession,
+  fetchCurrentUser,
+  getStoredToken,
+  getStoredUser,
 } from './services/api';
 
 export default function App() {
   const [activeTab, setActiveTab]     = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState(getStoredUser());
   const [stats, setStats]             = useState(null);
   const [meals, setMeals]             = useState([]);
   const [settingsData, setSettings]   = useState(null);
   const [isModalOpen, setModalOpen]   = useState(false);
   const [editingMeal, setEditingMeal] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   const loadAll = async () => {
     try {
@@ -35,9 +42,9 @@ export default function App() {
       setSettings(settingsRes);
 
       // Seed sample meals on first empty launch
-      if ((!mealsRes.meals || mealsRes.meals.length === 0)) {
-        await seedSamples();
-      }
+      // if ((!mealsRes.meals || mealsRes.meals.length === 0)) {
+      //   await seedSamples();
+      // }
     } catch (e) {
       console.error('Init load error:', e);
     }
@@ -59,7 +66,53 @@ export default function App() {
     }
   };
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    const bootstrapAuth = async () => {
+      const token = getStoredToken();
+      if (!token) {
+        setAuthChecked(true);
+        return;
+      }
+
+      try {
+        const response = await fetchCurrentUser();
+        setCurrentUser(response.user);
+        await loadAll();
+      } catch (error) {
+        clearAuthSession();
+        setCurrentUser(null);
+      } finally {
+        setAuthChecked(true);
+      }
+    };
+
+    bootstrapAuth();
+  }, []);
+
+  const handleAuthenticated = async (user) => {
+    setCurrentUser(user);
+    setAuthChecked(true);
+    await loadAll();
+  };
+
+  const handleLogout = () => {
+    clearAuthSession();
+    setCurrentUser(null);
+    setStats(null);
+    setMeals([]);
+    setSettings(null);
+    setIsModalOpen(false);
+    setEditingMeal(null);
+    setActiveTab('dashboard');
+  };
+
+  if (!authChecked) {
+    return <div className="auth-shell"><div className="glass-panel auth-card">Loading...</div></div>;
+  }
+
+  if (!currentUser) {
+    return <AuthScreen onAuthenticated={handleAuthenticated} />;
+  }
 
   const handleSaveMeal = async (data) => {
     try {
@@ -90,6 +143,8 @@ export default function App() {
         setActiveTab={setActiveTab}
         dbStatus={settingsData?.database}
         onOpenAddModal={openAdd}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       <main className="main-content">
@@ -108,7 +163,7 @@ export default function App() {
       </main>
 
       <footer className="app-footer">
-        CalorieAI &bull; React · Node.js · MSSQL · Azure OpenAI Vision
+        CalorieAI &bull; React · Node.js
       </footer>
 
       <AddMealModal

@@ -1,9 +1,7 @@
 import React from 'react';
-import { LayoutDashboard, Camera, UtensilsCrossed, BarChart3, Database, Plus, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Camera, UtensilsCrossed, BarChart3, Plus, Sparkles, LogOut } from 'lucide-react';
 
-export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddModal }) {
-  const isMssql = dbStatus?.engine === 'mssql';
-
+export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddModal, currentUser, onLogout }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'scanner', label: 'AI Scanner', icon: Camera, badge: 'Azure AI' },
@@ -24,7 +22,7 @@ export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddMod
           </div>
           <div>
             <div className="navbar-logo-title">CalorieAI</div>
-            <div className="navbar-logo-sub">Azure OpenAI · MSSQL</div>
+            <div className="navbar-logo-sub">Smart nutrition tracking</div>
           </div>
         </div>
 
@@ -54,18 +52,17 @@ export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddMod
 
         {/* Right Side */}
         <div className="navbar-right">
-          <div
-            title={isMssql ? 'MSSQL Connected' : 'Using Local Storage Fallback'}
-            className={`db-status-pill ${isMssql ? 'db-status-connected' : 'db-status-fallback'}`}
-          >
-            <Database size={13} />
-            <span>{isMssql ? 'MSSQL Connected' : 'Local Store'}</span>
-            <span className={`status-dot ${isMssql ? 'status-dot-on' : 'status-dot-off'}`} />
+          <div className="navbar-user-pill">
+            <span>{currentUser?.name}</span>
+            <span className="navbar-user-email">{currentUser?.email}</span>
           </div>
-
           <button onClick={onOpenAddModal} className="btn btn-primary btn-sm">
             <Plus size={15} />
             Log Meal
+          </button>
+          <button onClick={onLogout} className="btn btn-secondary btn-sm">
+            <LogOut size={15} />
+            Logout
           </button>
         </div>
       </div>

@@ -48,9 +48,9 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
           fat_g:     res.analysis.fat_g     || 0,
           notes:     res.analysis.notes     || '',
         });
-      } else setErrorMsg('Failed to get analysis from Azure OpenAI.');
+      } else setErrorMsg('Failed to get AI analysis.');
     } catch (err) {
-      setErrorMsg(err.response?.data?.error || err.message || 'Error running Azure OpenAI scanner.');
+      setErrorMsg(err.response?.data?.error || err.message || 'Error running AI scanner.');
     } finally {
       setIsScanning(false);
     }
@@ -82,7 +82,7 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
           <div className="scanner-icon"><Camera size={26} /></div>
           <div>
             <h2 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-              Azure OpenAI Vision Calorie Estimator
+              AI Calorie Estimator
               <span className="badge badge-emerald">GPT-4o Vision</span>
             </h2>
             <p className="text-sm text-muted">
@@ -153,7 +153,7 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
                 <div>
                   <div className="analysis-badges">
                     <span className="badge badge-emerald">
-                      <Sparkles size={10} /> {analysisResult.analysis.is_simulated ? 'AI Simulated' : 'Azure OpenAI Vision'}
+                      <Sparkles size={10} /> {analysisResult.analysis.is_simulated ? 'AI Simulated' : 'AI Analysis'}
                     </span>
                     <span className="badge badge-blue">
                       {Math.round((analysisResult.analysis.confidence_score || 0.9) * 100)}% Confidence
@@ -255,9 +255,9 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
           ) : (
             <div className="glass-panel analysis-placeholder">
               <Sparkles size={48} style={{ color: 'var(--primary-light)', opacity: 0.25 }} />
-              <h4 className="section-title">Ready for Azure OpenAI Vision Analysis</h4>
+              <h4 className="section-title">Ready for AI Analysis</h4>
               <p className="text-sm text-muted" style={{ maxWidth: 320 }}>
-                Upload or drag a meal photo, then click "Estimate Calories" to see instant AI-powered recognition.
+                Upload or drag a meal photo, then click "Estimate Calories" to see instant recognition.
               </p>
             </div>
           )}

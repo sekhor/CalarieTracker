@@ -8,6 +8,8 @@ const mealsRouter = require('./routes/meals');
 const analyzeRouter = require('./routes/analyze');
 const dashboardRouter = require('./routes/dashboard');
 const settingsRouter = require('./routes/settings');
+const authRouter = require('./routes/auth');
+const { requireAuth } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -45,10 +47,11 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // Mount API routes
-app.use('/api/meals', mealsRouter);
-app.use('/api/analyze', analyzeRouter);
-app.use('/api/dashboard', dashboardRouter);
-app.use('/api/settings', settingsRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/meals', requireAuth, mealsRouter);
+app.use('/api/analyze', requireAuth, analyzeRouter);
+app.use('/api/dashboard', requireAuth, dashboardRouter);
+app.use('/api/settings', requireAuth, settingsRouter);
 
 // Base health endpoint
 app.get('/api/health', (req, res) => {

@@ -8,6 +8,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine
 } from 'recharts';
+import MealPhoto from '../components/MealPhoto';
 
 export default function DashboardView({ stats, onNavigate, onOpenAddModal }) {
   const today  = stats?.today  || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, meal_count: 0 };
@@ -45,7 +46,7 @@ export default function DashboardView({ stats, onNavigate, onOpenAddModal }) {
             </div>
             <h1 className="page-title" style={{ marginBottom: '0.25rem' }}>Daily Calorie Dashboard</h1>
             <p className="text-sm text-muted">
-              Track daily nutrition, scan meals with Azure OpenAI Vision, monitor health targets.
+              Track daily nutrition, scan meals instantly, and monitor health targets.
             </p>
           </div>
           <div className="hero-actions">
@@ -210,10 +211,7 @@ export default function DashboardView({ stats, onNavigate, onOpenAddModal }) {
             {recent.map(meal => (
               <div key={meal.id} className="meal-card glass-card-interactive">
                 <div className="meal-card-thumb">
-                  {meal.image_url
-                    ? <img src={`http://localhost:5000${meal.image_url}`} alt={meal.meal_name} onError={e => { e.target.style.display = 'none'; }} />
-                    : <Utensils size={22} />
-                  }
+                  <MealPhoto imageUrl={meal.image_url} alt={meal.meal_name} />
                 </div>
                 <div className="meal-card-info">
                   <div className="meal-card-top">

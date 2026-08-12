@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const sql = require('mssql');
-const { getMssqlPool, getLocalStore, getEngine } = require('../config/db');
+const { getMssqlPool, getLocalStore, getEngine, getUserGoals } = require('../config/db');
 
 // Helper to format Date as YYYY-MM-DD
 function formatDate(d) {
@@ -16,32 +16,20 @@ router.get('/stats', async (req, res) => {
   try {
     const engine = getEngine();
     const todayStr = formatDate(new Date());
+    const userId = req.user.id;
 
     let meals = [];
-    let goals = {
-      daily_calorie_target: 2000,
-      protein_target_g: 140,
-      carbs_target_g: 225,
-      fat_target_g: 65,
-    };
+    let goals = await getUserGoals(userId);
 
     if (engine === 'mssql') {
       const pool = getMssqlPool();
-      const mealsRes = await pool.request().query(`SELECT * FROM Meals ORDER BY logged_at DESC`);
+      const mealsRes = await pool.request()
+        .input('user_id', sql.Int, userId)
+        .query(`SELECT * FROM Meals WHERE user_id = @user_id ORDER BY logged_at DESC`);
       meals = mealsRes.recordset || [];
-
-      const goalsRes = await pool.request().query(`SELECT setting_value FROM UserSettings WHERE setting_key = 'daily_goals'`);
-      if (goalsRes.recordset && goalsRes.recordset.length > 0) {
-        try {
-          goals = { ...goals, ...JSON.parse(goalsRes.recordset[0].setting_value) };
-        } catch (e) {}
-      }
     } else {
       const store = getLocalStore();
-      meals = store.meals || [];
-      if (store.user_settings && store.user_settings.daily_goals) {
-        goals = { ...goals, ...store.user_settings.daily_goals };
-      }
+      meals = (store.meals || []).filter((meal) => String(meal.user_id) === String(userId));
     }
 
     // Filter today's meals
