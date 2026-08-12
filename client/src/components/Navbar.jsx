@@ -1,7 +1,7 @@
 import React from 'react';
-import { LayoutDashboard, Camera, UtensilsCrossed, BarChart3, Plus, Sparkles, LogOut } from 'lucide-react';
+import { LayoutDashboard, Camera, UtensilsCrossed, BarChart3, Plus, Sparkles, LogOut, Download } from 'lucide-react';
 
-export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddModal, currentUser, onLogout }) {
+export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddModal, currentUser, onLogout, canInstall, onInstall }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'scanner', label: 'AI Scanner', icon: Camera, badge: 'Azure AI' },
@@ -52,6 +52,12 @@ export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddMod
 
         {/* Right Side */}
         <div className="navbar-right">
+          {canInstall ? (
+            <button onClick={onInstall} className="btn btn-secondary btn-sm">
+              <Download size={15} />
+              Install App
+            </button>
+          ) : null}
           <div className="navbar-user-pill">
             <span>{currentUser?.name}</span>
             <span className="navbar-user-email">{currentUser?.email}</span>
@@ -69,6 +75,12 @@ export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddMod
 
       {/* Mobile Nav */}
       <nav className="navbar-mobile">
+        {canInstall ? (
+          <button onClick={onInstall} className="navbar-mobile-item install">
+            <Download size={20} />
+            <span>Install</span>
+          </button>
+        ) : null}
         {navItems.map(item => {
           const Icon = item.icon;
           return (

@@ -3,6 +3,20 @@ const router = express.Router();
 const sql = require('mssql');
 const { getMssqlPool, getLocalStore, getEngine, getUserGoals } = require('../config/db');
 
+function toMealResponse(meal) {
+  if (!meal) return meal;
+
+  const normalizedMeal = { ...meal };
+  const hasImageData = Boolean(normalizedMeal.image_data);
+
+  if (hasImageData) {
+    normalizedMeal.image_url = `/api/meals/${normalizedMeal.id}/photo`;
+  }
+
+  delete normalizedMeal.image_data;
+  return normalizedMeal;
+}
+
 // Helper to format Date as YYYY-MM-DD
 function formatDate(d) {
   const year = d.getFullYear();
@@ -107,7 +121,7 @@ router.get('/stats', async (req, res) => {
       goals,
       weekly_trend: last7Days,
       category_breakdown: categoryData,
-      recent_meals: meals.slice(0, 5),
+      recent_meals: meals.slice(0, 5).map(toMealResponse),
       engine,
     });
   } catch (err) {

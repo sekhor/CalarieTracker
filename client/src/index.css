@@ -1462,3 +1462,7 @@ input, select, textarea { font-family: inherit; }
   font-size: 0.72rem;
   color: var(--text-dim);
 }
+
+.navbar-mobile-item.install {
+  color: var(--emerald-light);
+}

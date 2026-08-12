@@ -6,6 +6,7 @@ import DashboardView from './views/DashboardView';
 import AIScannerView from './views/AIScannerView';
 import MealLogView from './views/MealLogView';
 import AnalyticsView from './views/AnalyticsView';
+import useInstallPrompt from './hooks/useInstallPrompt';
 
 import {
   fetchDashboardStats,
@@ -29,6 +30,7 @@ export default function App() {
   const [isModalOpen, setModalOpen]   = useState(false);
   const [editingMeal, setEditingMeal] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const { canInstall, promptInstall } = useInstallPrompt();
 
   const loadAll = async () => {
     try {
@@ -135,6 +137,13 @@ export default function App() {
 
   const handleEdit = (meal) => { setEditingMeal(meal); setModalOpen(true); };
   const openAdd    = ()     => { setEditingMeal(null); setModalOpen(true); };
+  const handleInstall = async () => {
+    try {
+      await promptInstall();
+    } catch (error) {
+      console.error('Install prompt failed:', error);
+    }
+  };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -145,6 +154,8 @@ export default function App() {
         onOpenAddModal={openAdd}
         currentUser={currentUser}
         onLogout={handleLogout}
+        canInstall={canInstall}
+        onInstall={handleInstall}
       />
 
       <main className="main-content">
