@@ -7,7 +7,7 @@ const getApiUrl = () => {
   if (hostname === 'localhost') {
     return 'http://localhost:5000/api';
   } else if (hostname === 'agreeable-bush-057734510.7.azurestaticapps.net') {
-    return 'https://calarie-abf2fagwc6fnbjfr.southeastasia-01.azurewebsites.net/api';
+    return 'https://calarie-api-faedf7akcfdrgtdf.southeastasia-01.azurewebsites.net/api';
   }
   // Default to production URL
   return '/calarie-api-faedf7akcfdrgtdf.southeastasia-01.azurewebsites.net/api';
