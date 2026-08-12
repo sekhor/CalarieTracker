@@ -5,7 +5,6 @@ import DashboardView from './views/DashboardView';
 import AIScannerView from './views/AIScannerView';
 import MealLogView from './views/MealLogView';
 import AnalyticsView from './views/AnalyticsView';
-import SettingsView from './views/SettingsView';
 
 import {
   fetchDashboardStats,
@@ -105,9 +104,6 @@ export default function App() {
         )}
         {activeTab === 'analytics' && (
           <AnalyticsView stats={stats} />
-        )}
-        {activeTab === 'settings' && (
-          <SettingsView settingsData={settingsData} onRefreshSettings={loadAll} />
         )}
       </main>
 

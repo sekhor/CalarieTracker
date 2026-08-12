@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Camera, UtensilsCrossed, BarChart3, Settings, Database, Plus, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Camera, UtensilsCrossed, BarChart3, Database, Plus, Sparkles } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddModal }) {
   const isMssql = dbStatus?.engine === 'mssql';
@@ -9,7 +9,6 @@ export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddMod
     { id: 'scanner', label: 'AI Scanner', icon: Camera, badge: 'Azure AI' },
     { id: 'log', label: 'Meal Log', icon: UtensilsCrossed },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (
@@ -56,7 +55,6 @@ export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddMod
         {/* Right Side */}
         <div className="navbar-right">
           <div
-            onClick={() => setActiveTab('settings')}
             title={isMssql ? 'MSSQL Connected' : 'Using Local Storage Fallback'}
             className={`db-status-pill ${isMssql ? 'db-status-connected' : 'db-status-fallback'}`}
           >
