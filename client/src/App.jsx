@@ -103,7 +103,7 @@ export default function App() {
     setStats(null);
     setMeals([]);
     setSettings(null);
-    setIsModalOpen(false);
+    setModalOpen(false);
     setEditingMeal(null);
     setActiveTab('dashboard');
   };
