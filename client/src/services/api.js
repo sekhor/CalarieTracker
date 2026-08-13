@@ -144,4 +144,19 @@ export const saveGoalSettings = async (goals) => {
   return res.data;
 };
 
+export const fetchChatSessions = async () => {
+  const res = await api.get('/chat/sessions');
+  return res.data;
+};
+
+export const fetchChatSessionMessages = async (sessionId) => {
+  const res = await api.get(`/chat/sessions/${sessionId}/messages`);
+  return res.data;
+};
+
+export const sendChatMessage = async (payload) => {
+  const res = await api.post('/chat/message', payload);
+  return res.data;
+};
+
 export default api;

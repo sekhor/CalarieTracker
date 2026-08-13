@@ -26,6 +26,9 @@ function ensureLocalStore() {
       meals: [],
       users: [],
       user_settings: {},
+      user_profiles: {},
+      chat_sessions: [],
+      chat_messages: [],
     };
     fs.writeFileSync(jsonDbPath, JSON.stringify(initialData, null, 2));
   }
@@ -40,9 +43,12 @@ function getLocalStore() {
       meals: Array.isArray(parsed.meals) ? parsed.meals : [],
       users: Array.isArray(parsed.users) ? parsed.users : [],
       user_settings: parsed.user_settings && typeof parsed.user_settings === 'object' ? parsed.user_settings : {},
+      user_profiles: parsed.user_profiles && typeof parsed.user_profiles === 'object' ? parsed.user_profiles : {},
+      chat_sessions: Array.isArray(parsed.chat_sessions) ? parsed.chat_sessions : [],
+      chat_messages: Array.isArray(parsed.chat_messages) ? parsed.chat_messages : [],
     };
   } catch (e) {
-    return { meals: [], users: [], user_settings: {} };
+    return { meals: [], users: [], user_settings: {}, user_profiles: {}, chat_sessions: [], chat_messages: [] };
   }
 }
 
@@ -163,6 +169,46 @@ async function initMSSQLTables(pool) {
     )
     BEGIN
       CREATE UNIQUE INDEX [UX_UserSettings_UserKey] ON [dbo].[UserSettings]([user_id], [setting_key]);
+    END;
+
+    IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[UserNutritionProfiles]') AND type in (N'U'))
+    BEGIN
+      CREATE TABLE [dbo].[UserNutritionProfiles] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [user_id] INT NOT NULL UNIQUE,
+        [goal_type] NVARCHAR(50) NULL,
+        [dietary_style] NVARCHAR(50) NULL,
+        [allergies_json] NVARCHAR(MAX) NULL,
+        [disliked_foods_json] NVARCHAR(MAX) NULL,
+        [notes] NVARCHAR(MAX) NULL,
+        [updated_at] DATETIME2 DEFAULT GETDATE()
+      );
+    END;
+
+    IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ChatSessions]') AND type in (N'U'))
+    BEGIN
+      CREATE TABLE [dbo].[ChatSessions] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [user_id] INT NOT NULL,
+        [title] NVARCHAR(255) NULL,
+        [created_at] DATETIME2 DEFAULT GETDATE(),
+        [updated_at] DATETIME2 DEFAULT GETDATE()
+      );
+    END;
+
+    IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ChatMessages]') AND type in (N'U'))
+    BEGIN
+      CREATE TABLE [dbo].[ChatMessages] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [session_id] INT NOT NULL,
+        [user_id] INT NOT NULL,
+        [role] NVARCHAR(20) NOT NULL,
+        [content] NVARCHAR(MAX) NOT NULL,
+        [message_type] NVARCHAR(50) NULL,
+        [sources_json] NVARCHAR(MAX) NULL,
+        [retrieval_summary_json] NVARCHAR(MAX) NULL,
+        [created_at] DATETIME2 DEFAULT GETDATE()
+      );
     END;
   `);
 }
@@ -291,6 +337,198 @@ async function saveUserGoals(userId, goalsObj) {
   saveLocalStore(store);
 }
 
+async function getUserNutritionProfile(userId) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    const result = await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .query('SELECT TOP 1 * FROM UserNutritionProfiles WHERE user_id = @user_id');
+
+    const row = result.recordset?.[0];
+    if (!row) return null;
+
+    return {
+      goal_type: row.goal_type || null,
+      dietary_style: row.dietary_style || null,
+      allergies: row.allergies_json ? JSON.parse(row.allergies_json) : [],
+      disliked_foods: row.disliked_foods_json ? JSON.parse(row.disliked_foods_json) : [],
+      notes: row.notes || '',
+      updated_at: row.updated_at,
+    };
+  }
+
+  const store = getLocalStore();
+  return store.user_profiles?.[String(userId)] || null;
+}
+
+async function saveUserNutritionProfile(userId, profile) {
+  const normalizedProfile = {
+    goal_type: profile?.goal_type || null,
+    dietary_style: profile?.dietary_style || null,
+    allergies: Array.isArray(profile?.allergies) ? profile.allergies : [],
+    disliked_foods: Array.isArray(profile?.disliked_foods) ? profile.disliked_foods : [],
+    notes: profile?.notes || '',
+    updated_at: new Date().toISOString(),
+  };
+
+  if (currentEngine === 'mssql' && mssqlPool) {
+    await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .input('goal_type', sql.NVarChar, normalizedProfile.goal_type)
+      .input('dietary_style', sql.NVarChar, normalizedProfile.dietary_style)
+      .input('allergies_json', sql.NVarChar, JSON.stringify(normalizedProfile.allergies))
+      .input('disliked_foods_json', sql.NVarChar, JSON.stringify(normalizedProfile.disliked_foods))
+      .input('notes', sql.NVarChar, normalizedProfile.notes)
+      .query(`
+        IF EXISTS (SELECT 1 FROM UserNutritionProfiles WHERE user_id = @user_id)
+          UPDATE UserNutritionProfiles
+          SET goal_type = @goal_type,
+              dietary_style = @dietary_style,
+              allergies_json = @allergies_json,
+              disliked_foods_json = @disliked_foods_json,
+              notes = @notes,
+              updated_at = GETDATE()
+          WHERE user_id = @user_id
+        ELSE
+          INSERT INTO UserNutritionProfiles (user_id, goal_type, dietary_style, allergies_json, disliked_foods_json, notes)
+          VALUES (@user_id, @goal_type, @dietary_style, @allergies_json, @disliked_foods_json, @notes)
+      `);
+
+    return normalizedProfile;
+  }
+
+  const store = getLocalStore();
+  store.user_profiles[String(userId)] = normalizedProfile;
+  saveLocalStore(store);
+  return normalizedProfile;
+}
+
+async function createChatSession(userId, title = 'New Coach Chat') {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    const result = await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .input('title', sql.NVarChar, title)
+      .query(`
+        INSERT INTO ChatSessions (user_id, title)
+        OUTPUT INSERTED.id, INSERTED.user_id, INSERTED.title, INSERTED.created_at, INSERTED.updated_at
+        VALUES (@user_id, @title)
+      `);
+    return result.recordset[0];
+  }
+
+  const store = getLocalStore();
+  const nextId = store.chat_sessions.reduce((max, session) => Math.max(max, Number(session.id) || 0), 0) + 1;
+  const now = new Date().toISOString();
+  const session = { id: nextId, user_id: userId, title, created_at: now, updated_at: now };
+  store.chat_sessions.push(session);
+  saveLocalStore(store);
+  return session;
+}
+
+async function updateChatSessionTimestamp(userId, sessionId) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .input('id', sql.Int, sessionId)
+      .query('UPDATE ChatSessions SET updated_at = GETDATE() WHERE id = @id AND user_id = @user_id');
+    return;
+  }
+
+  const store = getLocalStore();
+  const session = store.chat_sessions.find((item) => String(item.id) === String(sessionId) && String(item.user_id) === String(userId));
+  if (session) {
+    session.updated_at = new Date().toISOString();
+    saveLocalStore(store);
+  }
+}
+
+async function getChatSessions(userId) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    const result = await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .query('SELECT * FROM ChatSessions WHERE user_id = @user_id ORDER BY updated_at DESC');
+    return result.recordset || [];
+  }
+
+  const store = getLocalStore();
+  return store.chat_sessions
+    .filter((session) => String(session.user_id) === String(userId))
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+}
+
+async function getChatMessages(userId, sessionId, limit = 50) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    const result = await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .input('session_id', sql.Int, sessionId)
+      .input('limit', sql.Int, limit)
+      .query(`
+        SELECT TOP (@limit) * FROM ChatMessages
+        WHERE user_id = @user_id AND session_id = @session_id
+        ORDER BY created_at ASC
+      `);
+
+    return (result.recordset || []).map((message) => ({
+      ...message,
+      sources: message.sources_json ? JSON.parse(message.sources_json) : [],
+      retrieval_summary: message.retrieval_summary_json ? JSON.parse(message.retrieval_summary_json) : null,
+    }));
+  }
+
+  const store = getLocalStore();
+  return store.chat_messages
+    .filter((message) => String(message.user_id) === String(userId) && String(message.session_id) === String(sessionId))
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    .slice(-limit);
+}
+
+async function saveChatMessage({ sessionId, userId, role, content, messageType = null, sources = [], retrievalSummary = null }) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    const result = await mssqlPool.request()
+      .input('session_id', sql.Int, sessionId)
+      .input('user_id', sql.Int, userId)
+      .input('role', sql.NVarChar, role)
+      .input('content', sql.NVarChar, content)
+      .input('message_type', sql.NVarChar, messageType)
+      .input('sources_json', sql.NVarChar, JSON.stringify(sources || []))
+      .input('retrieval_summary_json', sql.NVarChar, retrievalSummary ? JSON.stringify(retrievalSummary) : null)
+      .query(`
+        INSERT INTO ChatMessages (session_id, user_id, role, content, message_type, sources_json, retrieval_summary_json)
+        OUTPUT INSERTED.*
+        VALUES (@session_id, @user_id, @role, @content, @message_type, @sources_json, @retrieval_summary_json)
+      `);
+
+    await updateChatSessionTimestamp(userId, sessionId);
+    const message = result.recordset[0];
+    return {
+      ...message,
+      sources,
+      retrieval_summary: retrievalSummary,
+    };
+  }
+
+  const store = getLocalStore();
+  const nextId = store.chat_messages.reduce((max, message) => Math.max(max, Number(message.id) || 0), 0) + 1;
+  const createdAt = new Date().toISOString();
+  const message = {
+    id: nextId,
+    session_id: sessionId,
+    user_id: userId,
+    role,
+    content,
+    message_type: messageType,
+    sources,
+    retrieval_summary: retrievalSummary,
+    created_at: createdAt,
+  };
+  store.chat_messages.push(message);
+  const session = store.chat_sessions.find((item) => String(item.id) === String(sessionId) && String(item.user_id) === String(userId));
+  if (session) {
+    session.updated_at = createdAt;
+  }
+  saveLocalStore(store);
+  return message;
+}
+
 // Get DB connection status
 function getDbStatus() {
   return {
@@ -308,16 +546,23 @@ function getDbStatus() {
 
 module.exports = {
   connectMSSQL,
+  createChatSession,
   createUser,
   findUserByEmail,
   findUserByToken,
+  getChatMessages,
+  getChatSessions,
   getDbStatus,
   getDefaultGoals,
   getLocalStore,
+  getUserNutritionProfile,
   getUserGoals,
+  saveChatMessage,
   saveLocalStore,
+  saveUserNutritionProfile,
   saveUserGoals,
   updateUserToken,
+  updateChatSessionTimestamp,
   getMssqlPool: () => mssqlPool,
   getEngine: () => currentEngine,
   getMssqlConfig: () => mssqlConfig,

@@ -9,6 +9,7 @@ const analyzeRouter = require('./routes/analyze');
 const dashboardRouter = require('./routes/dashboard');
 const settingsRouter = require('./routes/settings');
 const authRouter = require('./routes/auth');
+const chatRouter = require('./routes/chat');
 const { requireAuth } = require('./middleware/auth');
 
 const app = express();
@@ -52,6 +53,7 @@ app.use('/api/meals', requireAuth, mealsRouter);
 app.use('/api/analyze', requireAuth, analyzeRouter);
 app.use('/api/dashboard', requireAuth, dashboardRouter);
 app.use('/api/settings', requireAuth, settingsRouter);
+app.use('/api/chat', requireAuth, chatRouter);
 
 // Base health endpoint
 app.get('/api/health', (req, res) => {

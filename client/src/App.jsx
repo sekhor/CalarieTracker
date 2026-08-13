@@ -4,6 +4,7 @@ import AddMealModal from './components/AddMealModal';
 import AuthScreen from './components/AuthScreen';
 import DashboardView from './views/DashboardView';
 import AIScannerView from './views/AIScannerView';
+import CoachChatView from './views/CoachChatView';
 import MealLogView from './views/MealLogView';
 import AnalyticsView from './views/AnalyticsView';
 import useInstallPrompt from './hooks/useInstallPrompt';
@@ -164,6 +165,9 @@ export default function App() {
         )}
         {activeTab === 'scanner' && (
           <AIScannerView onSaveSuccess={loadAll} onNavigate={setActiveTab} />
+        )}
+        {activeTab === 'coach' && (
+          <CoachChatView />
         )}
         {activeTab === 'log' && (
           <MealLogView meals={meals} onRefresh={loadAll} onEditMeal={handleEdit} onDeleteMeal={handleDelete} onOpenAddModal={openAdd} />
