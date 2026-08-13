@@ -9,6 +9,7 @@ import {
   ResponsiveContainer, ReferenceLine
 } from 'recharts';
 import MealPhoto from '../components/MealPhoto';
+import { formatMalaysiaTime, getCurrentMalaysiaDateLabel } from '../utils/datetime';
 
 export default function DashboardView({ stats, onNavigate, onOpenAddModal }) {
   const today  = stats?.today  || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, meal_count: 0 };
@@ -42,7 +43,7 @@ export default function DashboardView({ stats, onNavigate, onOpenAddModal }) {
           <div>
             <div className="hero-date">
               <Calendar size={13} />
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+              {getCurrentMalaysiaDateLabel()}
             </div>
             <h1 className="page-title" style={{ marginBottom: '0.25rem' }}>Daily Calorie Dashboard</h1>
             <p className="text-sm text-muted">
@@ -217,7 +218,7 @@ export default function DashboardView({ stats, onNavigate, onOpenAddModal }) {
                   <div className="meal-card-top">
                     <span className="badge badge-blue">{meal.meal_type}</span>
                     <span className="meal-card-time">
-                      {new Date(meal.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatMalaysiaTime(meal.logged_at)}
                     </span>
                   </div>
                   <div className="meal-card-name">{meal.meal_name}</div>

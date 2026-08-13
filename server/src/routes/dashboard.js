@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const sql = require('mssql');
 const { getMssqlPool, getLocalStore, getEngine, getUserGoals } = require('../config/db');
+const { toMalaysiaDateKey, getMalaysiaWeekday } = require('../utils/datetime');
 
 function toMealResponse(meal) {
   if (!meal) return meal;
@@ -17,19 +18,11 @@ function toMealResponse(meal) {
   return normalizedMeal;
 }
 
-// Helper to format Date as YYYY-MM-DD
-function formatDate(d) {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 // GET /api/dashboard/stats - summary analytics and metric metrics
 router.get('/stats', async (req, res) => {
   try {
     const engine = getEngine();
-    const todayStr = formatDate(new Date());
+    const todayStr = toMalaysiaDateKey(new Date());
     const userId = req.user.id;
 
     let meals = [];
@@ -48,7 +41,7 @@ router.get('/stats', async (req, res) => {
 
     // Filter today's meals
     const todayMeals = meals.filter(m => {
-      const mealDate = formatDate(new Date(m.logged_at));
+      const mealDate = toMalaysiaDateKey(m.logged_at);
       return mealDate === todayStr;
     });
 
@@ -68,10 +61,10 @@ router.get('/stats', async (req, res) => {
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const dayFormatted = formatDate(d);
-      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayFormatted = toMalaysiaDateKey(d);
+      const dayName = getMalaysiaWeekday(d);
 
-      const dayMeals = meals.filter(m => formatDate(new Date(m.logged_at)) === dayFormatted);
+      const dayMeals = meals.filter(m => toMalaysiaDateKey(m.logged_at) === dayFormatted);
       const dayCalories = dayMeals.reduce((sum, m) => sum + Number(m.calories || 0), 0);
       const dayProtein = dayMeals.reduce((sum, m) => sum + Number(m.protein_g || 0), 0);
       const dayCarbs = dayMeals.reduce((sum, m) => sum + Number(m.carbs_g || 0), 0);

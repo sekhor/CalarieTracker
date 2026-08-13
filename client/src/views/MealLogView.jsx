@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Utensils, Search, Trash2, Edit3, Plus } from 'lucide-react';
 import MealPhoto from '../components/MealPhoto';
+import { formatMalaysiaDate, toMalaysiaDateKey } from '../utils/datetime';
 
 export default function MealLogView({ meals, onEditMeal, onDeleteMeal, onOpenAddModal }) {
   const [searchTerm, setSearchTerm]   = useState('');
@@ -16,8 +17,9 @@ export default function MealLogView({ meals, onEditMeal, onDeleteMeal, onOpenAdd
       (meal.meal_name && meal.meal_name.toLowerCase().includes(q)) ||
       (meal.notes && meal.notes.toLowerCase().includes(q));
     const matchCat  = category === 'All' || meal.meal_type === category;
-    const matchFrom = !fromDate || new Date(meal.logged_at) >= new Date(`${fromDate}T00:00:00`);
-    const matchTo   = !toDate   || new Date(meal.logged_at) <= new Date(`${toDate}T23:59:59`);
+    const mealDateKey = toMalaysiaDateKey(meal.logged_at);
+    const matchFrom = !fromDate || mealDateKey >= fromDate;
+    const matchTo   = !toDate   || mealDateKey <= toDate;
     return matchSearch && matchCat && matchFrom && matchTo;
   });
 
@@ -100,7 +102,7 @@ export default function MealLogView({ meals, onEditMeal, onDeleteMeal, onOpenAdd
                 <div className="full-meal-header">
                   <span className="badge badge-blue">{meal.meal_type}</span>
                   <span className="full-meal-date">
-                    {new Date(meal.logged_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {formatMalaysiaDate(meal.logged_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
 

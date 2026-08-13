@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Utensils, Flame, Dumbbell, Wheat, Droplet } from 'lucide-react';
+import { malaysiaDateTimeLocalToIso, toMalaysiaDateTimeLocalValue } from '../utils/datetime';
 
 export default function AddMealModal({ isOpen, onClose, onSave, initialData = null }) {
   const [formData, setFormData] = useState({
@@ -10,7 +11,7 @@ export default function AddMealModal({ isOpen, onClose, onSave, initialData = nu
     carbs_g: '',
     fat_g: '',
     notes: '',
-    logged_at: new Date().toISOString().slice(0, 16),
+    logged_at: toMalaysiaDateTimeLocalValue(),
   });
 
   useEffect(() => {
@@ -24,8 +25,8 @@ export default function AddMealModal({ isOpen, onClose, onSave, initialData = nu
         fat_g: initialData.fat_g || '',
         notes: initialData.notes || '',
         logged_at: initialData.logged_at
-          ? new Date(initialData.logged_at).toISOString().slice(0, 16)
-          : new Date().toISOString().slice(0, 16),
+          ? toMalaysiaDateTimeLocalValue(initialData.logged_at)
+          : toMalaysiaDateTimeLocalValue(),
       });
     } else {
       setFormData({
@@ -36,7 +37,7 @@ export default function AddMealModal({ isOpen, onClose, onSave, initialData = nu
         carbs_g: '',
         fat_g: '',
         notes: '',
-        logged_at: new Date().toISOString().slice(0, 16),
+        logged_at: toMalaysiaDateTimeLocalValue(),
       });
     }
   }, [initialData, isOpen]);
@@ -51,6 +52,7 @@ export default function AddMealModal({ isOpen, onClose, onSave, initialData = nu
       protein_g: Number(formData.protein_g || 0),
       carbs_g: Number(formData.carbs_g || 0),
       fat_g: Number(formData.fat_g || 0),
+      logged_at: malaysiaDateTimeLocalToIso(formData.logged_at),
     });
   };
 
