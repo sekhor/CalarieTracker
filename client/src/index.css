@@ -1800,6 +1800,19 @@ input, select, textarea { font-family: inherit; }
 .settings-form-row { display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem; }
 .settings-form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 .settings-form-actions { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
+.settings-goals-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.settings-feedback {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.settings-feedback.is-success { color: var(--emerald-light); }
+.settings-feedback.is-error { color: #fca5a5; }
 
 /* =====================
    Modal
@@ -1861,6 +1874,10 @@ input, select, textarea { font-family: inherit; }
   .modal-actions,
   .settings-form-actions {
     flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .settings-goals-footer {
+    flex-direction: column;
     align-items: stretch;
   }
   .modal-actions .btn,

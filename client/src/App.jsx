@@ -16,6 +16,7 @@ import {
   createMeal,
   updateMeal,
   deleteMeal,
+  saveGoalSettings,
   clearAuthSession,
   fetchCurrentUser,
   getStoredToken,
@@ -138,6 +139,16 @@ export default function App() {
 
   const handleEdit = (meal) => { setEditingMeal(meal); setModalOpen(true); };
   const openAdd    = ()     => { setEditingMeal(null); setModalOpen(true); };
+  const handleSaveGoals = async (goals) => {
+    try {
+      await saveGoalSettings(goals);
+      await loadAll();
+    } catch (error) {
+      console.error('Save goals error:', error);
+      throw error;
+    }
+  };
+
   const handleInstall = async () => {
     try {
       await promptInstall();
@@ -161,7 +172,12 @@ export default function App() {
 
       <main className="main-content">
         {activeTab === 'dashboard' && (
-          <DashboardView stats={stats} onNavigate={setActiveTab} onOpenAddModal={openAdd} />
+          <DashboardView
+            stats={stats}
+            onNavigate={setActiveTab}
+            onOpenAddModal={openAdd}
+            onSaveGoals={handleSaveGoals}
+          />
         )}
         {activeTab === 'scanner' && (
           <AIScannerView onSaveSuccess={loadAll} onNavigate={setActiveTab} />
