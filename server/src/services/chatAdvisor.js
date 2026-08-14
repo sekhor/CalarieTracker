@@ -3,6 +3,7 @@ const { classifyMessage } = require('./chatClassifier');
 const { appendMessage, ensureSession, listMessages } = require('./chatHistory');
 const { buildPromptMessages } = require('./chatPromptBuilder');
 const { getStructuredContext } = require('./chatRetrieval');
+const { generateInsightsFromContext } = require('./insightEngine');
 const { buildSafetyReply, evaluateMessageRisk, shouldRefuse } = require('./chatSafety');
 
 function asMealLabel(meal) {
@@ -100,12 +101,14 @@ async function handleChatMessage({ userId, sessionId, message }) {
       reply: refusal,
       sources: [],
       retrieval_summary: null,
+      insights: [],
       safety: { medical_disclaimer: false, estimate_disclaimer: false },
     };
   }
 
   const history = await listMessages(userId, session.id, 12);
   const context = await getStructuredContext({ userId, classification, message });
+  context.insights = generateInsightsFromContext(context);
   const promptMessages = buildPromptMessages({ message, context, history });
 
   let reply = '';
@@ -144,6 +147,7 @@ async function handleChatMessage({ userId, sessionId, message }) {
     reply,
     sources: context.sources,
     retrieval_summary: context.retrievalSummary,
+    insights: context.insights,
     response_mode: usedFallback ? 'fallback' : 'azure',
     fallback_reason: fallbackReason,
     safety: {

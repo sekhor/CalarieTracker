@@ -90,9 +90,24 @@ export default function CoachChatView() {
       }
 
       await loadSessions();
-
-      const refreshedMessages = await fetchChatSessionMessages(response.session_id);
-      setMessages(refreshedMessages.messages || []);
+      setMessages((current) => {
+        const withoutOptimistic = current.filter((message) => message.id !== optimisticUserMessage.id);
+        return [
+          ...withoutOptimistic,
+          {
+            ...optimisticUserMessage,
+            id: `user-${Date.now()}`,
+          },
+          {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            content: response.reply,
+            sources: response.sources || [],
+            insights: response.insights || [],
+            created_at: new Date().toISOString(),
+          },
+        ];
+      });
     } catch (sendError) {
       setError(sendError.response?.data?.error || 'Failed to send message to the coach.');
       setMessages((current) => current.filter((message) => message.id !== optimisticUserMessage.id));
@@ -176,6 +191,16 @@ export default function CoachChatView() {
                 </div>
                 <div className={`coach-message-bubble ${message.role === 'user' ? 'coach-message-bubble-user' : ''}`}>
                   <div className="coach-message-text">{message.content}</div>
+                  {Array.isArray(message.insights) && message.insights.length > 0 ? (
+                    <div className="coach-inline-insights">
+                      {message.insights.slice(0, 2).map((insight) => (
+                        <div key={insight.id} className="coach-inline-insight-card">
+                          <strong>{insight.title}</strong>
+                          <span>{insight.recommendation}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   {Array.isArray(message.sources) && message.sources.length > 0 ? (
                     <div className="coach-source-list">
                       {message.sources.map((source, index) => (

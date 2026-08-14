@@ -176,14 +176,39 @@ async function initMSSQLTables(pool) {
       CREATE TABLE [dbo].[UserNutritionProfiles] (
         [id] INT IDENTITY(1,1) PRIMARY KEY,
         [user_id] INT NOT NULL UNIQUE,
+        [age] INT NULL,
+        [sex] NVARCHAR(20) NULL,
+        [height_cm] FLOAT NULL,
+        [weight_kg] FLOAT NULL,
+        [activity_level] NVARCHAR(50) NULL,
         [goal_type] NVARCHAR(50) NULL,
         [dietary_style] NVARCHAR(50) NULL,
         [allergies_json] NVARCHAR(MAX) NULL,
         [disliked_foods_json] NVARCHAR(MAX) NULL,
+        [preferred_cuisines_json] NVARCHAR(MAX) NULL,
+        [meals_per_day_target] INT NULL,
+        [medical_disclaimer_ack] BIT DEFAULT 0,
         [notes] NVARCHAR(MAX) NULL,
         [updated_at] DATETIME2 DEFAULT GETDATE()
       );
     END;
+
+    IF COL_LENGTH('dbo.UserNutritionProfiles', 'age') IS NULL
+      ALTER TABLE [dbo].[UserNutritionProfiles] ADD [age] INT NULL;
+    IF COL_LENGTH('dbo.UserNutritionProfiles', 'sex') IS NULL
+      ALTER TABLE [dbo].[UserNutritionProfiles] ADD [sex] NVARCHAR(20) NULL;
+    IF COL_LENGTH('dbo.UserNutritionProfiles', 'height_cm') IS NULL
+      ALTER TABLE [dbo].[UserNutritionProfiles] ADD [height_cm] FLOAT NULL;
+    IF COL_LENGTH('dbo.UserNutritionProfiles', 'weight_kg') IS NULL
+      ALTER TABLE [dbo].[UserNutritionProfiles] ADD [weight_kg] FLOAT NULL;
+    IF COL_LENGTH('dbo.UserNutritionProfiles', 'activity_level') IS NULL
+      ALTER TABLE [dbo].[UserNutritionProfiles] ADD [activity_level] NVARCHAR(50) NULL;
+    IF COL_LENGTH('dbo.UserNutritionProfiles', 'preferred_cuisines_json') IS NULL
+      ALTER TABLE [dbo].[UserNutritionProfiles] ADD [preferred_cuisines_json] NVARCHAR(MAX) NULL;
+    IF COL_LENGTH('dbo.UserNutritionProfiles', 'meals_per_day_target') IS NULL
+      ALTER TABLE [dbo].[UserNutritionProfiles] ADD [meals_per_day_target] INT NULL;
+    IF COL_LENGTH('dbo.UserNutritionProfiles', 'medical_disclaimer_ack') IS NULL
+      ALTER TABLE [dbo].[UserNutritionProfiles] ADD [medical_disclaimer_ack] BIT NOT NULL CONSTRAINT [DF_UserNutritionProfiles_MedicalDisclaimerAck] DEFAULT 0;
 
     IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[ChatSessions]') AND type in (N'U'))
     BEGIN
@@ -347,10 +372,18 @@ async function getUserNutritionProfile(userId) {
     if (!row) return null;
 
     return {
+      age: row.age ?? null,
+      sex: row.sex || null,
+      height_cm: row.height_cm ?? null,
+      weight_kg: row.weight_kg ?? null,
+      activity_level: row.activity_level || null,
       goal_type: row.goal_type || null,
       dietary_style: row.dietary_style || null,
       allergies: row.allergies_json ? JSON.parse(row.allergies_json) : [],
       disliked_foods: row.disliked_foods_json ? JSON.parse(row.disliked_foods_json) : [],
+      preferred_cuisines: row.preferred_cuisines_json ? JSON.parse(row.preferred_cuisines_json) : [],
+      meals_per_day_target: row.meals_per_day_target ?? null,
+      medical_disclaimer_ack: Boolean(row.medical_disclaimer_ack),
       notes: row.notes || '',
       updated_at: row.updated_at,
     };
@@ -362,10 +395,18 @@ async function getUserNutritionProfile(userId) {
 
 async function saveUserNutritionProfile(userId, profile) {
   const normalizedProfile = {
+    age: Number.isFinite(Number(profile?.age)) ? Number(profile.age) : null,
+    sex: profile?.sex ? String(profile.sex) : null,
+    height_cm: Number.isFinite(Number(profile?.height_cm)) ? Number(profile.height_cm) : null,
+    weight_kg: Number.isFinite(Number(profile?.weight_kg)) ? Number(profile.weight_kg) : null,
+    activity_level: profile?.activity_level ? String(profile.activity_level) : null,
     goal_type: profile?.goal_type || null,
     dietary_style: profile?.dietary_style || null,
     allergies: Array.isArray(profile?.allergies) ? profile.allergies : [],
     disliked_foods: Array.isArray(profile?.disliked_foods) ? profile.disliked_foods : [],
+    preferred_cuisines: Array.isArray(profile?.preferred_cuisines) ? profile.preferred_cuisines : [],
+    meals_per_day_target: Number.isFinite(Number(profile?.meals_per_day_target)) ? Number(profile.meals_per_day_target) : null,
+    medical_disclaimer_ack: Boolean(profile?.medical_disclaimer_ack),
     notes: profile?.notes || '',
     updated_at: new Date().toISOString(),
   };
@@ -373,24 +414,40 @@ async function saveUserNutritionProfile(userId, profile) {
   if (currentEngine === 'mssql' && mssqlPool) {
     await mssqlPool.request()
       .input('user_id', sql.Int, userId)
+      .input('age', sql.Int, normalizedProfile.age)
+      .input('sex', sql.NVarChar, normalizedProfile.sex)
+      .input('height_cm', sql.Float, normalizedProfile.height_cm)
+      .input('weight_kg', sql.Float, normalizedProfile.weight_kg)
+      .input('activity_level', sql.NVarChar, normalizedProfile.activity_level)
       .input('goal_type', sql.NVarChar, normalizedProfile.goal_type)
       .input('dietary_style', sql.NVarChar, normalizedProfile.dietary_style)
       .input('allergies_json', sql.NVarChar, JSON.stringify(normalizedProfile.allergies))
       .input('disliked_foods_json', sql.NVarChar, JSON.stringify(normalizedProfile.disliked_foods))
+      .input('preferred_cuisines_json', sql.NVarChar, JSON.stringify(normalizedProfile.preferred_cuisines))
+      .input('meals_per_day_target', sql.Int, normalizedProfile.meals_per_day_target)
+      .input('medical_disclaimer_ack', sql.Bit, normalizedProfile.medical_disclaimer_ack)
       .input('notes', sql.NVarChar, normalizedProfile.notes)
       .query(`
         IF EXISTS (SELECT 1 FROM UserNutritionProfiles WHERE user_id = @user_id)
           UPDATE UserNutritionProfiles
-          SET goal_type = @goal_type,
+          SET age = @age,
+              sex = @sex,
+              height_cm = @height_cm,
+              weight_kg = @weight_kg,
+              activity_level = @activity_level,
+              goal_type = @goal_type,
               dietary_style = @dietary_style,
               allergies_json = @allergies_json,
               disliked_foods_json = @disliked_foods_json,
+              preferred_cuisines_json = @preferred_cuisines_json,
+              meals_per_day_target = @meals_per_day_target,
+              medical_disclaimer_ack = @medical_disclaimer_ack,
               notes = @notes,
               updated_at = GETDATE()
           WHERE user_id = @user_id
         ELSE
-          INSERT INTO UserNutritionProfiles (user_id, goal_type, dietary_style, allergies_json, disliked_foods_json, notes)
-          VALUES (@user_id, @goal_type, @dietary_style, @allergies_json, @disliked_foods_json, @notes)
+          INSERT INTO UserNutritionProfiles (user_id, age, sex, height_cm, weight_kg, activity_level, goal_type, dietary_style, allergies_json, disliked_foods_json, preferred_cuisines_json, meals_per_day_target, medical_disclaimer_ack, notes)
+          VALUES (@user_id, @age, @sex, @height_cm, @weight_kg, @activity_level, @goal_type, @dietary_style, @allergies_json, @disliked_foods_json, @preferred_cuisines_json, @meals_per_day_target, @medical_disclaimer_ack, @notes)
       `);
 
     return normalizedProfile;

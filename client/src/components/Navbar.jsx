@@ -1,11 +1,13 @@
 import React from 'react';
-import { LayoutDashboard, Camera, UtensilsCrossed, BarChart3, Plus, Sparkles, LogOut, Download, MessageSquareHeart } from 'lucide-react';
+import { LayoutDashboard, Camera, UtensilsCrossed, BarChart3, Plus, Sparkles, LogOut, Download, MessageSquareHeart, ClipboardList, BrainCircuit } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddModal, currentUser, onLogout, canInstall, onInstall }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'scanner', label: 'AI Scanner', icon: Camera, badge: 'Azure AI' },
     { id: 'coach', label: 'Coach', icon: MessageSquareHeart, badge: 'Nutrition AI' },
+    { id: 'profile', label: 'Profile', icon: ClipboardList },
+    { id: 'insights', label: 'Insights', icon: BrainCircuit, badge: 'Weekly' },
     { id: 'log', label: 'Meal Log', icon: UtensilsCrossed },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   ];

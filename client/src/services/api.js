@@ -159,4 +159,19 @@ export const sendChatMessage = async (payload) => {
   return res.data;
 };
 
+export const fetchNutritionProfile = async () => {
+  const res = await api.get('/profile');
+  return res.data;
+};
+
+export const saveNutritionProfile = async (payload) => {
+  const res = await api.post('/profile', payload);
+  return res.data;
+};
+
+export const fetchInsights = async () => {
+  const res = await api.get('/insights');
+  return res.data;
+};
+
 export default api;

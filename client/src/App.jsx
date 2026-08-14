@@ -5,8 +5,10 @@ import AuthScreen from './components/AuthScreen';
 import DashboardView from './views/DashboardView';
 import AIScannerView from './views/AIScannerView';
 import CoachChatView from './views/CoachChatView';
+import NutritionProfileView from './views/NutritionProfileView';
 import MealLogView from './views/MealLogView';
 import AnalyticsView from './views/AnalyticsView';
+import InsightsView from './views/InsightsView';
 import useInstallPrompt from './hooks/useInstallPrompt';
 
 import {
@@ -184,6 +186,12 @@ export default function App() {
         )}
         {activeTab === 'coach' && (
           <CoachChatView />
+        )}
+        {activeTab === 'profile' && (
+          <NutritionProfileView />
+        )}
+        {activeTab === 'insights' && (
+          <InsightsView />
         )}
         {activeTab === 'log' && (
           <MealLogView meals={meals} onRefresh={loadAll} onEditMeal={handleEdit} onDeleteMeal={handleDelete} onOpenAddModal={openAdd} />

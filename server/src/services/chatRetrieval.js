@@ -116,6 +116,8 @@ async function getStructuredContext({ userId, classification }) {
     average_meals_per_day_7d: mealsPerDayAverage,
     snack_count_7d: snackPattern.count,
     snack_avg_calories_7d: snackPattern.avg_calories,
+    profile_goal_type: profile?.goal_type || null,
+    profile_dietary_style: profile?.dietary_style || null,
   };
 
   return {
@@ -148,6 +150,7 @@ async function getStructuredContext({ userId, classification }) {
       { type: 'goals', label: 'Daily Goals' },
       { type: 'today_meals', label: "Today's Meals" },
       { type: 'weekly_trend', label: 'Last 7 Days' },
+      ...(profile ? [{ type: 'profile', label: 'Nutrition Profile' }] : []),
     ],
     retrievalSummary,
   };
