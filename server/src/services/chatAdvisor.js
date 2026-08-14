@@ -5,6 +5,8 @@ const { buildPromptMessages } = require('./chatPromptBuilder');
 const { getStructuredContext } = require('./chatRetrieval');
 const { generateInsightsFromContext } = require('./insightEngine');
 const { buildSafetyReply, evaluateMessageRisk, shouldRefuse } = require('./chatSafety');
+const { updateCoachMemories } = require('./coachMemory');
+const { generateMealPlan } = require('./mealPlanner');
 
 function asMealLabel(meal) {
   if (!meal?.meal_name) return 'your recent meals';
@@ -109,6 +111,12 @@ async function handleChatMessage({ userId, sessionId, message }) {
   const history = await listMessages(userId, session.id, 12);
   const context = await getStructuredContext({ userId, classification, message });
   context.insights = generateInsightsFromContext(context);
+  const shouldAttachPlan = classification.intent === 'meal_recommendation' || /meal plan|plan my meals|what should i eat next|guided plan/.test(String(message || '').toLowerCase());
+  const generatedPlan = shouldAttachPlan ? generateMealPlan({
+    profile: context.profile,
+    retrievalSummary: context.retrievalSummary,
+    insights: context.insights,
+  }) : null;
   const promptMessages = buildPromptMessages({ message, context, history });
 
   let reply = '';
@@ -139,7 +147,11 @@ async function handleChatMessage({ userId, sessionId, message }) {
     messageType: classification.intent,
     sources: context.sources,
     retrievalSummary: context.retrievalSummary,
+    insights: context.insights,
+    plan: generatedPlan,
   });
+
+  await updateCoachMemories({ userId, context });
 
   return {
     session_id: session.id,
@@ -148,6 +160,7 @@ async function handleChatMessage({ userId, sessionId, message }) {
     sources: context.sources,
     retrieval_summary: context.retrievalSummary,
     insights: context.insights,
+    plan: generatedPlan,
     response_mode: usedFallback ? 'fallback' : 'azure',
     fallback_reason: fallbackReason,
     safety: {

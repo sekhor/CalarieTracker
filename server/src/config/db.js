@@ -29,6 +29,8 @@ function ensureLocalStore() {
       user_profiles: {},
       chat_sessions: [],
       chat_messages: [],
+      knowledge_documents: [],
+      coach_memories: [],
     };
     fs.writeFileSync(jsonDbPath, JSON.stringify(initialData, null, 2));
   }
@@ -46,9 +48,20 @@ function getLocalStore() {
       user_profiles: parsed.user_profiles && typeof parsed.user_profiles === 'object' ? parsed.user_profiles : {},
       chat_sessions: Array.isArray(parsed.chat_sessions) ? parsed.chat_sessions : [],
       chat_messages: Array.isArray(parsed.chat_messages) ? parsed.chat_messages : [],
+      knowledge_documents: Array.isArray(parsed.knowledge_documents) ? parsed.knowledge_documents : [],
+      coach_memories: Array.isArray(parsed.coach_memories) ? parsed.coach_memories : [],
     };
   } catch (e) {
-    return { meals: [], users: [], user_settings: {}, user_profiles: {}, chat_sessions: [], chat_messages: [] };
+    return {
+      meals: [],
+      users: [],
+      user_settings: {},
+      user_profiles: {},
+      chat_sessions: [],
+      chat_messages: [],
+      knowledge_documents: [],
+      coach_memories: [],
+    };
   }
 }
 
@@ -232,9 +245,48 @@ async function initMSSQLTables(pool) {
         [message_type] NVARCHAR(50) NULL,
         [sources_json] NVARCHAR(MAX) NULL,
         [retrieval_summary_json] NVARCHAR(MAX) NULL,
+        [insights_json] NVARCHAR(MAX) NULL,
+        [plan_json] NVARCHAR(MAX) NULL,
         [created_at] DATETIME2 DEFAULT GETDATE()
       );
     END;
+
+    IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[KnowledgeDocuments]') AND type in (N'U'))
+    BEGIN
+      CREATE TABLE KnowledgeDocuments (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [user_id] INT NOT NULL,
+        [title] NVARCHAR(255) NOT NULL,
+        [doc_type] NVARCHAR(100) NULL,
+        [source_name] NVARCHAR(255) NULL,
+        [content_text] NVARCHAR(MAX) NOT NULL,
+        [chunks_json] NVARCHAR(MAX) NULL,
+        [tags_json] NVARCHAR(MAX) NULL,
+        [created_at] DATETIME2 DEFAULT GETDATE()
+      );
+    END
+
+    IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[CoachMemories]') AND type in (N'U'))
+    BEGIN
+      CREATE TABLE CoachMemories (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [user_id] INT NOT NULL,
+        [memory_type] NVARCHAR(100) NOT NULL,
+        [title] NVARCHAR(255) NOT NULL,
+        [summary] NVARCHAR(MAX) NOT NULL,
+        [metadata_json] NVARCHAR(MAX) NULL,
+        [created_at] DATETIME2 DEFAULT GETDATE(),
+        [updated_at] DATETIME2 DEFAULT GETDATE()
+      );
+    END;
+
+  `);
+
+  await req.query(`
+    IF COL_LENGTH('ChatMessages', 'insights_json') IS NULL
+      ALTER TABLE ChatMessages ADD [insights_json] NVARCHAR(MAX) NULL;
+    IF COL_LENGTH('ChatMessages', 'plan_json') IS NULL
+      ALTER TABLE ChatMessages ADD [plan_json] NVARCHAR(MAX) NULL;
   `);
 }
 
@@ -528,6 +580,8 @@ async function getChatMessages(userId, sessionId, limit = 50) {
       ...message,
       sources: message.sources_json ? JSON.parse(message.sources_json) : [],
       retrieval_summary: message.retrieval_summary_json ? JSON.parse(message.retrieval_summary_json) : null,
+      insights: message.insights_json ? JSON.parse(message.insights_json) : [],
+      plan: message.plan_json ? JSON.parse(message.plan_json) : null,
     }));
   }
 
@@ -548,10 +602,12 @@ async function saveChatMessage({ sessionId, userId, role, content, messageType =
       .input('message_type', sql.NVarChar, messageType)
       .input('sources_json', sql.NVarChar, JSON.stringify(sources || []))
       .input('retrieval_summary_json', sql.NVarChar, retrievalSummary ? JSON.stringify(retrievalSummary) : null)
+      .input('insights_json', sql.NVarChar, JSON.stringify(arguments[0].insights || []))
+      .input('plan_json', sql.NVarChar, arguments[0].plan ? JSON.stringify(arguments[0].plan) : null)
       .query(`
-        INSERT INTO ChatMessages (session_id, user_id, role, content, message_type, sources_json, retrieval_summary_json)
+        INSERT INTO ChatMessages (session_id, user_id, role, content, message_type, sources_json, retrieval_summary_json, insights_json, plan_json)
         OUTPUT INSERTED.*
-        VALUES (@session_id, @user_id, @role, @content, @message_type, @sources_json, @retrieval_summary_json)
+        VALUES (@session_id, @user_id, @role, @content, @message_type, @sources_json, @retrieval_summary_json, @insights_json, @plan_json)
       `);
 
     await updateChatSessionTimestamp(userId, sessionId);
@@ -560,6 +616,8 @@ async function saveChatMessage({ sessionId, userId, role, content, messageType =
       ...message,
       sources,
       retrieval_summary: retrievalSummary,
+      insights: arguments[0].insights || [],
+      plan: arguments[0].plan || null,
     };
   }
 
@@ -575,6 +633,8 @@ async function saveChatMessage({ sessionId, userId, role, content, messageType =
     message_type: messageType,
     sources,
     retrieval_summary: retrievalSummary,
+    insights: arguments[0].insights || [],
+    plan: arguments[0].plan || null,
     created_at: createdAt,
   };
   store.chat_messages.push(message);
@@ -584,6 +644,161 @@ async function saveChatMessage({ sessionId, userId, role, content, messageType =
   }
   saveLocalStore(store);
   return message;
+}
+
+async function saveKnowledgeDocument({ userId, title, docType = 'note', sourceName = null, contentText = '', chunks = [], tags = [] }) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    const result = await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .input('title', sql.NVarChar, title)
+      .input('doc_type', sql.NVarChar, docType)
+      .input('source_name', sql.NVarChar, sourceName)
+      .input('content_text', sql.NVarChar, contentText)
+      .input('chunks_json', sql.NVarChar, JSON.stringify(chunks || []))
+      .input('tags_json', sql.NVarChar, JSON.stringify(tags || []))
+      .query(`
+        INSERT INTO KnowledgeDocuments (user_id, title, doc_type, source_name, content_text, chunks_json, tags_json)
+        OUTPUT INSERTED.*
+        VALUES (@user_id, @title, @doc_type, @source_name, @content_text, @chunks_json, @tags_json)
+      `);
+
+    const row = result.recordset[0];
+    return {
+      ...row,
+      chunks,
+      tags,
+    };
+  }
+
+  const store = getLocalStore();
+  const nextId = store.knowledge_documents.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1;
+  const document = {
+    id: nextId,
+    user_id: userId,
+    title,
+    doc_type: docType,
+    source_name: sourceName,
+    content_text: contentText,
+    chunks,
+    tags,
+    created_at: new Date().toISOString(),
+  };
+  store.knowledge_documents.push(document);
+  saveLocalStore(store);
+  return document;
+}
+
+async function getKnowledgeDocuments(userId) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    const result = await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .query('SELECT * FROM KnowledgeDocuments WHERE user_id = @user_id ORDER BY created_at DESC');
+
+    return (result.recordset || []).map((item) => ({
+      ...item,
+      chunks: item.chunks_json ? JSON.parse(item.chunks_json) : [],
+      tags: item.tags_json ? JSON.parse(item.tags_json) : [],
+    }));
+  }
+
+  const store = getLocalStore();
+  return store.knowledge_documents
+    .filter((item) => String(item.user_id) === String(userId))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+async function saveCoachMemory({ userId, memoryType, title, summary, metadata = {} }) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    const existing = await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .input('memory_type', sql.NVarChar, memoryType)
+      .input('title', sql.NVarChar, title)
+      .query('SELECT TOP 1 * FROM CoachMemories WHERE user_id = @user_id AND memory_type = @memory_type AND title = @title ORDER BY updated_at DESC');
+
+    if (existing.recordset?.[0]) {
+      const updated = await mssqlPool.request()
+        .input('id', sql.Int, existing.recordset[0].id)
+        .input('summary', sql.NVarChar, summary)
+        .input('metadata_json', sql.NVarChar, JSON.stringify(metadata || {}))
+        .query(`
+          UPDATE CoachMemories
+          SET summary = @summary, metadata_json = @metadata_json, updated_at = GETDATE()
+          OUTPUT INSERTED.*
+          WHERE id = @id
+        `);
+      return {
+        ...updated.recordset[0],
+        metadata,
+      };
+    }
+
+    const inserted = await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .input('memory_type', sql.NVarChar, memoryType)
+      .input('title', sql.NVarChar, title)
+      .input('summary', sql.NVarChar, summary)
+      .input('metadata_json', sql.NVarChar, JSON.stringify(metadata || {}))
+      .query(`
+        INSERT INTO CoachMemories (user_id, memory_type, title, summary, metadata_json)
+        OUTPUT INSERTED.*
+        VALUES (@user_id, @memory_type, @title, @summary, @metadata_json)
+      `);
+
+    return {
+      ...inserted.recordset[0],
+      metadata,
+    };
+  }
+
+  const store = getLocalStore();
+  const existingIndex = store.coach_memories.findIndex((item) => String(item.user_id) === String(userId) && item.memory_type === memoryType && item.title === title);
+  const timestamp = new Date().toISOString();
+
+  if (existingIndex >= 0) {
+    store.coach_memories[existingIndex] = {
+      ...store.coach_memories[existingIndex],
+      summary,
+      metadata,
+      updated_at: timestamp,
+    };
+    saveLocalStore(store);
+    return store.coach_memories[existingIndex];
+  }
+
+  const nextId = store.coach_memories.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0) + 1;
+  const memory = {
+    id: nextId,
+    user_id: userId,
+    memory_type: memoryType,
+    title,
+    summary,
+    metadata,
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
+  store.coach_memories.push(memory);
+  saveLocalStore(store);
+  return memory;
+}
+
+async function getCoachMemories(userId, limit = 10) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    const result = await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .input('limit', sql.Int, limit)
+      .query('SELECT TOP (@limit) * FROM CoachMemories WHERE user_id = @user_id ORDER BY updated_at DESC');
+
+    return (result.recordset || []).map((item) => ({
+      ...item,
+      metadata: item.metadata_json ? JSON.parse(item.metadata_json) : {},
+    }));
+  }
+
+  const store = getLocalStore();
+  return store.coach_memories
+    .filter((item) => String(item.user_id) === String(userId))
+    .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
+    .slice(0, limit);
 }
 
 // Get DB connection status
@@ -609,12 +824,16 @@ module.exports = {
   findUserByToken,
   getChatMessages,
   getChatSessions,
+  getCoachMemories,
   getDbStatus,
   getDefaultGoals,
   getLocalStore,
+  getKnowledgeDocuments,
   getUserNutritionProfile,
   getUserGoals,
   saveChatMessage,
+  saveCoachMemory,
+  saveKnowledgeDocument,
   saveLocalStore,
   saveUserNutritionProfile,
   saveUserGoals,

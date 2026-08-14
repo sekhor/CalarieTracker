@@ -104,6 +104,7 @@ export default function CoachChatView() {
             content: response.reply,
             sources: response.sources || [],
             insights: response.insights || [],
+            plan: response.plan || null,
             created_at: new Date().toISOString(),
           },
         ];
@@ -199,6 +200,17 @@ export default function CoachChatView() {
                           <span>{insight.recommendation}</span>
                         </div>
                       ))}
+                    </div>
+                  ) : null}
+                  {message.plan ? (
+                    <div className="coach-plan-card">
+                      <strong>{message.plan.title}</strong>
+                      <span>{message.plan.summary}</span>
+                      <div className="coach-source-list">
+                        {(message.plan.shopping_list || []).slice(0, 5).map((item) => (
+                          <span key={item} className="item-tag">{item}</span>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
                   {Array.isArray(message.sources) && message.sources.length > 0 ? (

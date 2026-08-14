@@ -174,4 +174,30 @@ export const fetchInsights = async () => {
   return res.data;
 };
 
+export const fetchKnowledgeDocuments = async () => {
+  const res = await api.get('/knowledge');
+  return res.data;
+};
+
+export const createKnowledgeNote = async (payload) => {
+  const res = await api.post('/knowledge/text', payload);
+  return res.data;
+};
+
+export const uploadKnowledgeDocument = async (formData) => {
+  const token = getStoredToken();
+  const res = await axios.post(`${API_BASE_URL}/knowledge/upload`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  return res.data;
+};
+
+export const generateMealPlan = async (payload) => {
+  const res = await api.post('/planner/meal-plan', payload);
+  return res.data;
+};
+
 export default api;

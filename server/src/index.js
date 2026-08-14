@@ -12,6 +12,8 @@ const authRouter = require('./routes/auth');
 const chatRouter = require('./routes/chat');
 const profileRouter = require('./routes/profile');
 const insightsRouter = require('./routes/insights');
+const knowledgeRouter = require('./routes/knowledge');
+const plannerRouter = require('./routes/planner');
 const { requireAuth } = require('./middleware/auth');
 
 const app = express();
@@ -58,6 +60,8 @@ app.use('/api/settings', requireAuth, settingsRouter);
 app.use('/api/chat', requireAuth, chatRouter);
 app.use('/api/profile', requireAuth, profileRouter);
 app.use('/api/insights', requireAuth, insightsRouter);
+app.use('/api/knowledge', requireAuth, knowledgeRouter);
+app.use('/api/planner', requireAuth, plannerRouter);
 
 // Base health endpoint
 app.get('/api/health', (req, res) => {

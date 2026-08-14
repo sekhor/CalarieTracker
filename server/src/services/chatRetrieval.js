@@ -1,5 +1,7 @@
 const { getEngine, getLocalStore, getMssqlPool, getUserGoals, getUserNutritionProfile } = require('../config/db');
 const sql = require('mssql');
+const { retrieveKnowledgeContext } = require('./knowledgeIngestion');
+const { getRelevantCoachMemories } = require('./coachMemory');
 
 function getDateKey(date) {
   const d = new Date(date);
@@ -45,7 +47,7 @@ function getDateWindowMeals(meals, days) {
   return meals.filter((meal) => new Date(meal.logged_at) >= start);
 }
 
-async function getStructuredContext({ userId, classification }) {
+async function getStructuredContext({ userId, classification, message = '' }) {
   const goals = await getUserGoals(userId);
   const profile = await getUserNutritionProfile(userId);
   const meals = await getAllUserMeals(userId);
@@ -120,6 +122,9 @@ async function getStructuredContext({ userId, classification }) {
     profile_dietary_style: profile?.dietary_style || null,
   };
 
+  const knowledge = await retrieveKnowledgeContext({ userId, query: message, limit: 3 });
+  const memories = await getRelevantCoachMemories(userId, 5);
+
   return {
     classification,
     goals,
@@ -151,8 +156,12 @@ async function getStructuredContext({ userId, classification }) {
       { type: 'today_meals', label: "Today's Meals" },
       { type: 'weekly_trend', label: 'Last 7 Days' },
       ...(profile ? [{ type: 'profile', label: 'Nutrition Profile' }] : []),
+      ...((knowledge.matches || []).length ? [{ type: 'knowledge', label: 'Knowledge Notes' }] : []),
+      ...(memories.length ? [{ type: 'memory', label: 'Coach Memory' }] : []),
     ],
     retrievalSummary,
+    knowledge,
+    memories,
   };
 }
 

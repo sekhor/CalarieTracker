@@ -9,6 +9,8 @@ import NutritionProfileView from './views/NutritionProfileView';
 import MealLogView from './views/MealLogView';
 import AnalyticsView from './views/AnalyticsView';
 import InsightsView from './views/InsightsView';
+import KnowledgeView from './views/KnowledgeView';
+import PlannerView from './views/PlannerView';
 import useInstallPrompt from './hooks/useInstallPrompt';
 
 import {
@@ -192,6 +194,12 @@ export default function App() {
         )}
         {activeTab === 'insights' && (
           <InsightsView />
+        )}
+        {activeTab === 'knowledge' && (
+          <KnowledgeView />
+        )}
+        {activeTab === 'planner' && (
+          <PlannerView />
         )}
         {activeTab === 'log' && (
           <MealLogView meals={meals} onRefresh={loadAll} onEditMeal={handleEdit} onDeleteMeal={handleDelete} onOpenAddModal={openAdd} />

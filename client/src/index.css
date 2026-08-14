@@ -558,6 +558,17 @@ input, select, textarea { font-family: inherit; }
   border: 1px solid rgba(139, 92, 246, 0.2);
   display: flex;
   flex-direction: column;
+
+.coach-plan-card {
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-md);
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.24);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
   gap: 0.35rem;
   font-size: 0.82rem;
 }
@@ -726,6 +737,64 @@ input, select, textarea { font-family: inherit; }
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 1rem;
+}
+
+.knowledge-layout,
+.planner-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.knowledge-form-card,
+.knowledge-list-card,
+.planner-input-card,
+.planner-results-card {
+  padding: 1.25rem;
+}
+
+.knowledge-upload-block,
+.planner-actions-block,
+.planner-shopping-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.knowledge-doc-list,
+.planner-meal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.knowledge-doc-card,
+.planner-meal-card {
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-glass);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.knowledge-doc-top,
+.planner-targets-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 960px) {
+  .knowledge-layout,
+  .planner-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 .coach-sidebar,
