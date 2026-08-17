@@ -9,23 +9,23 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      NODE_VERSION: '20'
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+            server/package-lock.json
 
-      - name: Install backend dependencies
-        run: npm install
-        working-directory: ./server
-
-      # - name: Build backend (TypeScript)
-      #   run: npm run build
-      #   working-directory: ./server
       - name: Verify Azure credentials
         run: |
           if [ -z "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ]; then
@@ -33,11 +33,35 @@ jobs:
             exit 1
           fi
           echo "Secret is configured"
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Build frontend bundle
+        run: npm run build
+
+      - name: Prepare deployment package
+        run: |
+          mkdir -p deploy
+          rsync -av \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude 'client/node_modules' \
+            --exclude 'server/node_modules' \
+            --exclude 'client/src' \
+            --exclude 'client/.vite' \
+            --exclude 'client/.vite-temp' \
+            --exclude 'docs' \
+            --exclude '.vscode' \
+            --exclude '.idea' \
+            --exclude 'server/.env' \
+            ./ deploy/
+
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
-        uses: azure/webapps-deploy@v2
+        uses: azure/webapps-deploy@v3
         with:
-          app-name: 'calarie-api' # Replace with your App Service name
-          # slot-name: 'production'
+          app-name: 'calarie-api'
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: './server'
+          package: './deploy'

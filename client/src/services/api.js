@@ -3,19 +3,15 @@ import axios from 'axios';
 const AUTH_TOKEN_KEY = 'calorie_tracker_token';
 const AUTH_USER_KEY = 'calorie_tracker_user';
 
-//const API_BASE_URL = 'http://localhost:5000/api';
-
-const getApiUrl = () => {
-  const hostname = window.location.hostname;
-  if (hostname === 'localhost') {
-    return 'http://localhost:5000/api';
-  } else if (hostname === 'agreeable-bush-057734510.7.azurestaticapps.net') {
-    return 'https://calarie-api-faedf7akcfdrgtdf.southeastasia-01.azurewebsites.net/api';
+const normalizeBaseUrl = (value) => {
+  if (!value) {
+    return '/api';
   }
-  // Default to production URL
-  return '/calarie-api-faedf7akcfdrgtdf.southeastasia-01.azurewebsites.net/api';
+
+  return value.endsWith('/') ? value.slice(0, -1) : value;
 };
- const API_BASE_URL = getApiUrl();
+
+const API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL || '/api');
 
 const api = axios.create({
   baseURL: API_BASE_URL,

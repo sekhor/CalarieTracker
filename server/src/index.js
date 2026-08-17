@@ -1,5 +1,7 @@
 require('dotenv').config();
 
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const { connectMSSQL } = require('./config/db');
@@ -18,12 +20,18 @@ const { requireAuth } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+const clientDistPath = path.resolve(__dirname, '..', '..', 'client', 'dist');
+const hasClientBuild = fs.existsSync(path.join(clientDistPath, 'index.html'));
 
 const defaultAllowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:4173',
 ];
+
+if (process.env.WEBSITE_HOSTNAME) {
+  defaultAllowedOrigins.push(`https://${process.env.WEBSITE_HOSTNAME}`);
+}
 
 const configuredAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
   .split(',')
@@ -68,14 +76,27 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'Calorie Tracker API', timestamp: new Date().toISOString() });
 });
 
+if (hasClientBuild) {
+  app.use(express.static(clientDistPath));
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+
+    return res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+}
+
 // Start Server & Initialize Database Connection
 async function startServer() {
   console.log('Initializing Calorie Tracker Database connection...');
   console.log('Allowed CORS origins:', allowedOrigins);
+  console.log('Client build detected:', hasClientBuild ? clientDistPath : 'not found');
   await connectMSSQL(); // attempts MSSQL connection, falls back to local storage if needed
 
   app.listen(PORT, () => {
-    console.log(`🚀 Calorie Tracker Backend Server listening on http://localhost:${PORT}`);
+    console.log(`🚀 Calorie Tracker server listening on port ${PORT}`);
   });
 }
 
