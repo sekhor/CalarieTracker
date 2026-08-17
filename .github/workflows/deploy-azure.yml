@@ -38,7 +38,7 @@ jobs:
         run: npm ci
 
       - name: Build frontend bundle
-        run: npm run build
+        run: cd client && npm run build
 
       - name: Prepare deployment package
         run: |
@@ -49,7 +49,6 @@ jobs:
             --exclude 'node_modules' \
             --exclude 'client/node_modules' \
             --exclude 'server/node_modules' \
-            --exclude 'client/src' \
             --exclude 'client/.vite' \
             --exclude 'client/.vite-temp' \
             --exclude 'docs' \
