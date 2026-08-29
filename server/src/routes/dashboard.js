@@ -4,17 +4,26 @@ const sql = require('mssql');
 const { getMssqlPool, getLocalStore, getEngine, getUserGoals } = require('../config/db');
 const { toMalaysiaDateKey, getMalaysiaWeekday } = require('../utils/datetime');
 
+const DASHBOARD_MEAL_COLUMNS = `
+  id, user_id, meal_name, meal_type, calories, protein_g, carbs_g, fat_g,
+  image_url, image_mime_type, notes, logged_at, created_at,
+  CASE WHEN image_data IS NOT NULL OR thumbnail_data IS NOT NULL THEN 1 ELSE 0 END AS has_image
+`;
+
 function toMealResponse(meal) {
   if (!meal) return meal;
 
   const normalizedMeal = { ...meal };
-  const hasImageData = Boolean(normalizedMeal.image_data);
+  const hasImageData = Boolean(normalizedMeal.image_data || normalizedMeal.has_image);
 
   if (hasImageData) {
     normalizedMeal.image_url = `/api/meals/${normalizedMeal.id}/photo`;
   }
 
   delete normalizedMeal.image_data;
+  delete normalizedMeal.thumbnail_data;
+  delete normalizedMeal.thumbnail_mime_type;
+  delete normalizedMeal.has_image;
   return normalizedMeal;
 }
 
@@ -26,17 +35,37 @@ router.get('/stats', async (req, res) => {
     const userId = req.user.id;
 
     let meals = [];
-    let goals = await getUserGoals(userId);
+    let recentMeals = [];
+    let goals;
 
     if (engine === 'mssql') {
       const pool = getMssqlPool();
-      const mealsRes = await pool.request()
-        .input('user_id', sql.Int, userId)
-        .query(`SELECT * FROM Meals WHERE user_id = @user_id ORDER BY logged_at DESC`);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 8);
+
+      const [resolvedGoals, mealsRes, recentMealsRes] = await Promise.all([
+        getUserGoals(userId),
+        pool.request()
+          .input('user_id', sql.Int, userId)
+          .input('cutoff', sql.DateTime2, cutoff)
+          .query(`SELECT ${DASHBOARD_MEAL_COLUMNS} FROM Meals WHERE user_id = @user_id AND logged_at >= @cutoff ORDER BY logged_at DESC`),
+        pool.request()
+          .input('user_id', sql.Int, userId)
+          .query(`SELECT TOP (5) ${DASHBOARD_MEAL_COLUMNS} FROM Meals WHERE user_id = @user_id ORDER BY logged_at DESC`),
+      ]);
+      goals = resolvedGoals;
       meals = mealsRes.recordset || [];
+      recentMeals = recentMealsRes.recordset || [];
     } else {
       const store = getLocalStore();
-      meals = (store.meals || []).filter((meal) => String(meal.user_id) === String(userId));
+      goals = await getUserGoals(userId);
+      const userMeals = (store.meals || [])
+        .filter((meal) => String(meal.user_id) === String(userId))
+        .sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at));
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 8);
+      meals = userMeals.filter((meal) => new Date(meal.logged_at) >= cutoff);
+      recentMeals = userMeals.slice(0, 5);
     }
 
     // Filter today's meals
@@ -114,7 +143,7 @@ router.get('/stats', async (req, res) => {
       goals,
       weekly_trend: last7Days,
       category_breakdown: categoryData,
-      recent_meals: meals.slice(0, 5).map(toMealResponse),
+      recent_meals: recentMeals.map(toMealResponse),
       engine,
     });
   } catch (err) {

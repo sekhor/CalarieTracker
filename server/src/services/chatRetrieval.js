@@ -32,7 +32,14 @@ async function getAllUserMeals(userId) {
     const pool = getMssqlPool();
     const result = await pool.request()
       .input('user_id', sql.Int, userId)
-      .query('SELECT * FROM Meals WHERE user_id = @user_id ORDER BY logged_at DESC');
+      .query(`
+        SELECT TOP (500)
+          id, user_id, meal_name, meal_type, calories, protein_g, carbs_g, fat_g,
+          notes, logged_at, created_at
+        FROM Meals
+        WHERE user_id = @user_id
+        ORDER BY logged_at DESC
+      `);
     return result.recordset || [];
   }
 
@@ -48,9 +55,11 @@ function getDateWindowMeals(meals, days) {
 }
 
 async function getStructuredContext({ userId, classification, message = '' }) {
-  const goals = await getUserGoals(userId);
-  const profile = await getUserNutritionProfile(userId);
-  const meals = await getAllUserMeals(userId);
+  const [goals, profile, meals] = await Promise.all([
+    getUserGoals(userId),
+    getUserNutritionProfile(userId),
+    getAllUserMeals(userId),
+  ]);
   const todayKey = getDateKey(new Date());
   const todayMeals = meals.filter((meal) => getDateKey(meal.logged_at) === todayKey);
   const weeklyMeals = getDateWindowMeals(meals, 7);
@@ -122,8 +131,10 @@ async function getStructuredContext({ userId, classification, message = '' }) {
     profile_dietary_style: profile?.dietary_style || null,
   };
 
-  const knowledge = await retrieveKnowledgeContext({ userId, query: message, limit: 3 });
-  const memories = await getRelevantCoachMemories(userId, 5);
+  const [knowledge, memories] = await Promise.all([
+    retrieveKnowledgeContext({ userId, query: message, limit: 3 }),
+    getRelevantCoachMemories(userId, 5),
+  ]);
 
   return {
     classification,

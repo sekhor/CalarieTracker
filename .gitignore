@@ -16,6 +16,8 @@ out/
 server/node_modules/
 server/dist/
 server/.env
+server/uploads/
+server/data/*.tmp
 
 # Frontend
 frontend/node_modules/

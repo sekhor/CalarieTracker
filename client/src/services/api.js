@@ -15,6 +15,7 @@ const API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL || '/api
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 12000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -73,8 +74,25 @@ export const loginUser = async (payload) => {
   return res.data;
 };
 
-export const fetchCurrentUser = async () => {
-  const res = await api.get('/auth/me');
+export const fetchCurrentUser = async ({ retries = 5 } = {}) => {
+  let attempt = 0;
+  while (attempt < retries) {
+    try {
+      const res = await api.get('/auth/me');
+      return res.data;
+    } catch (error) {
+      attempt += 1;
+      if (error.response?.status !== 503 || attempt >= retries) throw error;
+      const retryAfterSeconds = Number(error.response.headers?.['retry-after']) || Math.min(4, attempt);
+      await new Promise((resolve) => window.setTimeout(resolve, retryAfterSeconds * 1000));
+    }
+  }
+
+  throw new Error('Unable to validate the current session.');
+};
+
+export const logoutUser = async () => {
+  const res = await api.post('/auth/logout');
   return res.data;
 };
 
@@ -91,6 +109,22 @@ export const fetchMealPhotoBlob = async (imageUrl) => {
 
 export const createMeal = async (mealData) => {
   const res = await api.post('/meals', mealData);
+  return res.data;
+};
+
+export const createMealWithPhoto = async (mealData, photo) => {
+  const formData = new FormData();
+  Object.entries(mealData).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      formData.append(key, String(value));
+    }
+  });
+  formData.append('photo', photo);
+
+  const res = await api.post('/meals', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 20000,
+  });
   return res.data;
 };
 
@@ -111,6 +145,7 @@ export const analyzeMealPhoto = async (formData) => {
       'Content-Type': 'multipart/form-data',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
+    timeout: 35000,
   });
   return res.data;
 };
@@ -151,7 +186,7 @@ export const fetchChatSessionMessages = async (sessionId) => {
 };
 
 export const sendChatMessage = async (payload) => {
-  const res = await api.post('/chat/message', payload);
+  const res = await api.post('/chat/message', payload, { timeout: 40000 });
   return res.data;
 };
 

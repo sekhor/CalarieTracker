@@ -3,7 +3,8 @@ import {
   Camera, Upload, Sparkles, Flame, Dumbbell, Wheat, Droplet,
   CheckCircle2, AlertCircle, RefreshCw, Save
 } from 'lucide-react';
-import { analyzeMealPhoto, createMeal } from '../services/api';
+import { analyzeMealPhoto, createMeal, createMealWithPhoto } from '../services/api';
+import { optimizeImageFile } from '../utils/images';
 
 export default function AIScannerView({ onSaveSuccess, onNavigate }) {
   const [selectedFile, setSelectedFile]   = useState(null);
@@ -18,17 +19,32 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
     calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, notes: '',
   });
 
-  const selectFile = (file) => {
-    setSelectedFile(file);
+  const selectFile = async (file) => {
+    setErrorMsg('');
+    let optimizedFile = file;
+    try {
+      optimizedFile = await optimizeImageFile(file);
+    } catch (error) {
+      console.warn('Image optimization failed; using the original file.', error);
+    }
+
+    setSelectedFile(optimizedFile);
     const reader = new FileReader();
     reader.onloadend = () => setImagePreview(reader.result);
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(optimizedFile);
     setAnalysis(null); setSavedSuccess(false); setErrorMsg('');
   };
 
-  const handleFileChange = (e) => e.target.files[0] && selectFile(e.target.files[0]);
-  const handleDrop = (e) => { e.preventDefault(); e.dataTransfer.files[0] && selectFile(e.dataTransfer.files[0]); };
-  const handleDragOver = (e) => e.preventDefault();
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (file) void selectFile(file);
+  };
+  const handleDrop = (event) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) void selectFile(file);
+  };
+  const handleDragOver = (event) => event.preventDefault();
 
   const handleRunAnalysis = async () => {
     setIsScanning(true); setErrorMsg(''); setSavedSuccess(false);
@@ -58,17 +74,18 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
 
   const handleSave = async () => {
     try {
-      await createMeal({
+      const mealData = {
         meal_name: editForm.meal_name, meal_type: editForm.meal_type,
         calories: Number(editForm.calories), protein_g: Number(editForm.protein_g),
         carbs_g:  Number(editForm.carbs_g),  fat_g:     Number(editForm.fat_g),
-        image_base64: analysisResult?.image_base64 || null,
-        image_mime_type: analysisResult?.image_mime_type || null,
         notes: editForm.notes, logged_at: new Date().toISOString(),
-      });
+      };
+
+      if (selectedFile) await createMealWithPhoto(mealData, selectedFile);
+      else await createMeal(mealData);
       setSavedSuccess(true);
       if (onSaveSuccess) onSaveSuccess();
-    } catch (err) {
+    } catch {
       setErrorMsg('Failed to save meal record to database.');
     }
   };

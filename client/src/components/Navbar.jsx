@@ -1,7 +1,7 @@
 import React from 'react';
 import { LayoutDashboard, Camera, UtensilsCrossed, BarChart3, Plus, Sparkles, LogOut, Download, MessageSquareHeart, ClipboardList, BrainCircuit, BookOpenText, ClipboardPenLine } from 'lucide-react';
 
-export default function Navbar({ activeTab, setActiveTab, dbStatus, onOpenAddModal, currentUser, onLogout, canInstall, onInstall }) {
+export default function Navbar({ activeTab, setActiveTab, onOpenAddModal, currentUser, onLogout, canInstall, onInstall }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'scanner', label: 'AI Scanner', icon: Camera, badge: 'Azure AI' },

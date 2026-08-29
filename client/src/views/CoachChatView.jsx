@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, LoaderCircle, SendHorizonal, Sparkles, User } from 'lucide-react';
 import { fetchChatSessionMessages, fetchChatSessions, sendChatMessage } from '../services/api';
 
@@ -25,22 +25,22 @@ export default function CoachChatView() {
     [sessions, activeSessionId]
   );
 
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     try {
       const response = await fetchChatSessions();
       const sessionList = response.sessions || [];
       setSessions(sessionList);
-      if (!activeSessionId && sessionList.length) {
-        setActiveSessionId(sessionList[0].id);
+      if (sessionList.length) {
+        setActiveSessionId((currentId) => currentId || sessionList[0].id);
       }
     } catch (loadError) {
       setError(loadError.response?.data?.error || 'Failed to load coach sessions.');
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadSessions();
-  }, []);
+  }, [loadSessions]);
 
   useEffect(() => {
     const loadMessages = async () => {

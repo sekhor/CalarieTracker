@@ -1,15 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import {
   Flame, Dumbbell, Wheat, Droplet,
   Camera, Plus, TrendingUp, Calendar,
   ChevronRight, Utensils, Save, SlidersHorizontal
 } from 'lucide-react';
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, ReferenceLine
-} from 'recharts';
 import MealPhoto from '../components/MealPhoto';
 import { formatMalaysiaTime, getCurrentMalaysiaDateLabel } from '../utils/datetime';
+
+const DashboardTrendChart = lazy(() => import('../components/DashboardTrendChart'));
 
 const DEFAULT_GOALS = {
   daily_calorie_target: 2000,
@@ -18,7 +16,7 @@ const DEFAULT_GOALS = {
   fat_target_g: 65,
 };
 
-export default function DashboardView({ stats, onNavigate, onOpenAddModal, onSaveGoals }) {
+export default function DashboardView({ stats, isLoading = false, error = '', onRetry, onNavigate, onOpenAddModal, onSaveGoals }) {
   const today  = stats?.today  || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, meal_count: 0 };
   const goals  = stats?.goals  || DEFAULT_GOALS;
   const weekly = stats?.weekly_trend   || [];
@@ -51,13 +49,6 @@ export default function DashboardView({ stats, onNavigate, onOpenAddModal, onSav
 
   const CIRC = 2 * Math.PI * 40;
 
-  const tooltipStyle = {
-    backgroundColor: 'rgba(15,23,42,0.95)',
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 10,
-    color: '#fff',
-    fontSize: 12,
-  };
 
   const handleGoalChange = (field) => (event) => {
     const { value } = event.target;
@@ -88,6 +79,14 @@ export default function DashboardView({ stats, onNavigate, onOpenAddModal, onSav
 
   return (
     <div className="page-space animate-fadeIn">
+
+      {isLoading && !stats ? <div className="glass-panel loading-panel">Loading dashboard…</div> : null}
+      {error ? (
+        <div className="info-box info-box-error">
+          <span>{error}</span>
+          {onRetry ? <button type="button" className="btn btn-secondary btn-sm" onClick={onRetry}>Retry</button> : null}
+        </div>
+      ) : null}
 
       {/* Hero Banner */}
       <div className="glass-panel hero-banner">
@@ -219,21 +218,9 @@ export default function DashboardView({ stats, onNavigate, onOpenAddModal, onSav
             </div>
 
             <div className="chart-area">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={weekly} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="day" stroke="#6b7280" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#6b7280" fontSize={11} tickLine={false} />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <ReferenceLine y={goals.daily_calorie_target} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: 'Goal', fill: '#f59e0b', fontSize: 10 }} />
-                  <Area type="monotone" dataKey="calories" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#areaGrad)" />
-                </AreaChart>
-              </ResponsiveContainer>
+              <Suspense fallback={<div className="loading-panel">Loading chart…</div>}>
+                <DashboardTrendChart weekly={weekly} calorieTarget={goals.daily_calorie_target} />
+              </Suspense>
             </div>
           </div>
         </div>

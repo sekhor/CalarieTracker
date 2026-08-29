@@ -108,8 +108,10 @@ async function handleChatMessage({ userId, sessionId, message }) {
     };
   }
 
-  const history = await listMessages(userId, session.id, 12);
-  const context = await getStructuredContext({ userId, classification, message });
+  const [history, context] = await Promise.all([
+    listMessages(userId, session.id, 12),
+    getStructuredContext({ userId, classification, message }),
+  ]);
   context.insights = generateInsightsFromContext(context);
   const shouldAttachPlan = classification.intent === 'meal_recommendation' || /meal plan|plan my meals|what should i eat next|guided plan/.test(String(message || '').toLowerCase());
   const generatedPlan = shouldAttachPlan ? generateMealPlan({
@@ -139,19 +141,20 @@ async function handleChatMessage({ userId, sessionId, message }) {
     usedFallback = true;
   }
 
-  await appendMessage({
-    sessionId: session.id,
-    userId,
-    role: 'assistant',
-    content: reply,
-    messageType: classification.intent,
-    sources: context.sources,
-    retrievalSummary: context.retrievalSummary,
-    insights: context.insights,
-    plan: generatedPlan,
-  });
-
-  await updateCoachMemories({ userId, context });
+  await Promise.all([
+    appendMessage({
+      sessionId: session.id,
+      userId,
+      role: 'assistant',
+      content: reply,
+      messageType: classification.intent,
+      sources: context.sources,
+      retrievalSummary: context.retrievalSummary,
+      insights: context.insights,
+      plan: generatedPlan,
+    }),
+    updateCoachMemories({ userId, context }),
+  ]);
 
   return {
     session_id: session.id,
