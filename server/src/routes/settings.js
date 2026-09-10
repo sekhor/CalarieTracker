@@ -56,10 +56,11 @@ router.post('/mssql', async (req, res) => {
       database,
       user,
       password,
+      connectionTimeout: 8000,
+      requestTimeout: 15000,
       options: {
         encrypt: false,
         trustServerCertificate: trustServerCertificate !== false,
-        connectTimeout: 8000,
       },
     };
 

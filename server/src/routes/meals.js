@@ -1,19 +1,77 @@
 const express = require('express');
 const router = express.Router();
 const sql = require('mssql');
+const multer = require('multer');
+const sharp = require('sharp');
 const { getMssqlPool, getLocalStore, saveLocalStore, getEngine } = require('../config/db');
+
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/heic', 'image/heif']);
+const ALLOWED_IMAGE_FORMATS = new Set(['jpeg', 'png', 'webp', 'avif', 'heif']);
+const MAX_IMAGE_PIXELS = 40_000_000;
+sharp.concurrency(2);
+sharp.cache({ memory: 50, files: 0, items: 100 });
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, callback) => {
+    const allowed = ALLOWED_IMAGE_TYPES.has(file.mimetype);
+    callback(allowed ? null : new Error('Only JPEG, PNG, WebP, AVIF, and HEIF images are supported.'), allowed);
+  },
+});
+
+function uploadMealPhoto(req, res, next) {
+  upload.single('photo')(req, res, (error) => {
+    if (error) {
+      return res.status(400).json({ error: error.message || 'Invalid meal photo upload.' });
+    }
+    return next();
+  });
+}
+
+const MEAL_LIST_COLUMNS = `
+  id, user_id, meal_name, meal_type, calories, protein_g, carbs_g, fat_g,
+  image_url, image_mime_type, notes, logged_at, created_at,
+  CASE WHEN image_data IS NOT NULL OR thumbnail_data IS NOT NULL THEN 1 ELSE 0 END AS has_image
+`;
+
+async function createThumbnail(imageBuffer) {
+  if (!imageBuffer) return null;
+  try {
+    const image = sharp(imageBuffer, { limitInputPixels: MAX_IMAGE_PIXELS, failOn: 'warning' });
+    const metadata = await image.metadata();
+    if (!metadata.format || !ALLOWED_IMAGE_FORMATS.has(metadata.format)) {
+      throw new Error('Unsupported image format.');
+    }
+    if (!metadata.width || !metadata.height || metadata.width * metadata.height > MAX_IMAGE_PIXELS) {
+      throw new Error('Image dimensions are too large.');
+    }
+
+    return await image
+      .rotate()
+      .resize({ width: 480, height: 480, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 78, mozjpeg: true })
+      .toBuffer();
+  } catch (error) {
+    const validationError = new Error(`Invalid meal image: ${error.message}`);
+    validationError.statusCode = 400;
+    throw validationError;
+  }
+}
 
 function toMealResponse(meal) {
   if (!meal) return meal;
 
   const normalizedMeal = { ...meal };
-  const hasImageData = Boolean(normalizedMeal.image_data);
+  const hasImageData = Boolean(normalizedMeal.image_data || normalizedMeal.has_image);
 
   if (hasImageData) {
     normalizedMeal.image_url = `/api/meals/${normalizedMeal.id}/photo`;
   }
 
   delete normalizedMeal.image_data;
+  delete normalizedMeal.thumbnail_data;
+  delete normalizedMeal.has_image;
   return normalizedMeal;
 }
 
@@ -23,12 +81,14 @@ router.get('/', async (req, res) => {
     const { search, meal_type, from_date, to_date, limit = 100 } = req.query;
     const engine = getEngine();
     const userId = req.user.id;
+    const parsedLimit = Number.parseInt(limit, 10);
+    const safeLimit = Number.isFinite(parsedLimit) ? Math.min(200, Math.max(1, parsedLimit)) : 100;
 
     if (engine === 'mssql') {
       const pool = getMssqlPool();
-      let query = `SELECT TOP (@limit) * FROM Meals WHERE user_id = @user_id`;
+      let query = `SELECT TOP (@limit) ${MEAL_LIST_COLUMNS} FROM Meals WHERE user_id = @user_id`;
       const request = pool.request();
-      request.input('limit', sql.Int, parseInt(limit, 10));
+      request.input('limit', sql.Int, safeLimit);
       request.input('user_id', sql.Int, userId);
 
       if (search) {
@@ -71,7 +131,7 @@ router.get('/', async (req, res) => {
       }
 
       meals.sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at));
-      meals = meals.slice(0, parseInt(limit, 10));
+      meals = meals.slice(0, safeLimit);
 
       return res.json({ meals: meals.map(toMealResponse), engine: 'local_fallback' });
     }
@@ -82,7 +142,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/meals - create a new meal
-router.post('/', async (req, res) => {
+router.post('/', uploadMealPhoto, async (req, res) => {
   try {
     const {
       meal_name,
@@ -98,18 +158,19 @@ router.post('/', async (req, res) => {
       logged_at = new Date().toISOString(),
     } = req.body;
 
-    let imageBuffer = null;
-    let normalizedImageMimeType = image_mime_type || null;
+    let imageBuffer = req.file?.buffer || null;
+    let normalizedImageMimeType = req.file?.mimetype || image_mime_type || null;
 
-    if (image_base64) {
+    if (!imageBuffer && image_base64) {
       const mimeMatch = image_base64.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
       normalizedImageMimeType = normalizedImageMimeType || mimeMatch?.[1] || 'image/jpeg';
       imageBuffer = Buffer.from(image_base64.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, ''), 'base64');
     }
-
     if (!meal_name) {
       return res.status(400).json({ error: 'Meal name is required' });
     }
+
+    const thumbnailBuffer = await createThumbnail(imageBuffer);
 
     const engine = getEngine();
     const userId = req.user.id;
@@ -127,12 +188,14 @@ router.post('/', async (req, res) => {
         .input('image_url', sql.NVarChar, image_url)
         .input('image_data', sql.VarBinary(sql.MAX), imageBuffer)
         .input('image_mime_type', sql.NVarChar, normalizedImageMimeType)
+        .input('thumbnail_data', sql.VarBinary(sql.MAX), thumbnailBuffer)
+        .input('thumbnail_mime_type', sql.NVarChar, thumbnailBuffer ? 'image/jpeg' : null)
         .input('notes', sql.NVarChar, notes)
         .input('logged_at', sql.DateTime2, new Date(logged_at))
         .query(`
-          INSERT INTO Meals (user_id, meal_name, meal_type, calories, protein_g, carbs_g, fat_g, image_url, image_data, image_mime_type, notes, logged_at)
+          INSERT INTO Meals (user_id, meal_name, meal_type, calories, protein_g, carbs_g, fat_g, image_url, image_data, image_mime_type, thumbnail_data, thumbnail_mime_type, notes, logged_at)
           OUTPUT INSERTED.*
-          VALUES (@user_id, @meal_name, @meal_type, @calories, @protein_g, @carbs_g, @fat_g, @image_url, @image_data, @image_mime_type, @notes, @logged_at)
+          VALUES (@user_id, @meal_name, @meal_type, @calories, @protein_g, @carbs_g, @fat_g, @image_url, @image_data, @image_mime_type, @thumbnail_data, @thumbnail_mime_type, @notes, @logged_at)
         `);
 
       return res.status(201).json({ meal: toMealResponse(result.recordset[0]), engine: 'mssql' });
@@ -150,21 +213,31 @@ router.post('/', async (req, res) => {
         carbs_g: parseFloat(carbs_g),
         fat_g: parseFloat(fat_g),
         image_url,
-        image_data: image_base64,
+        image_data: imageBuffer
+          ? `data:${normalizedImageMimeType || 'image/jpeg'};base64,${imageBuffer.toString('base64')}`
+          : image_base64,
         image_mime_type: normalizedImageMimeType,
+        thumbnail_data: thumbnailBuffer
+          ? `data:image/jpeg;base64,${thumbnailBuffer.toString('base64')}`
+          : null,
+        thumbnail_mime_type: thumbnailBuffer ? 'image/jpeg' : null,
         notes,
         logged_at: new Date(logged_at).toISOString(),
         created_at: new Date().toISOString(),
       };
 
       store.meals.push(newMeal);
-      saveLocalStore(store);
+      await saveLocalStore(store);
 
       return res.status(201).json({ meal: toMealResponse(newMeal), engine: 'local_fallback' });
     }
   } catch (err) {
-    console.error('Error creating meal:', err);
-    return res.status(500).json({ error: 'Failed to save meal record', details: err.message });
+    if (err.statusCode) console.warn('Rejected meal creation:', err.message);
+    else console.error('Error creating meal:', err);
+    return res.status(err.statusCode || 500).json({
+      error: err.statusCode ? err.message : 'Failed to save meal record',
+      ...(err.statusCode ? {} : { details: err.message }),
+    });
   }
 });
 
@@ -183,6 +256,7 @@ router.put('/:id', async (req, res) => {
       normalizedImageMimeType = normalizedImageMimeType || mimeMatch?.[1] || 'image/jpeg';
       imageBuffer = Buffer.from(image_base64.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, ''), 'base64');
     }
+    const thumbnailBuffer = await createThumbnail(imageBuffer);
 
     if (engine === 'mssql') {
       const pool = getMssqlPool();
@@ -198,6 +272,8 @@ router.put('/:id', async (req, res) => {
         .input('image_url', sql.NVarChar, image_url)
         .input('image_data', sql.VarBinary(sql.MAX), imageBuffer)
         .input('image_mime_type', sql.NVarChar, normalizedImageMimeType)
+        .input('thumbnail_data', sql.VarBinary(sql.MAX), thumbnailBuffer)
+        .input('thumbnail_mime_type', sql.NVarChar, thumbnailBuffer ? 'image/jpeg' : null)
         .input('notes', sql.NVarChar, notes)
         .input('logged_at', sql.DateTime2, new Date(logged_at))
         .query(`
@@ -207,6 +283,8 @@ router.put('/:id', async (req, res) => {
               image_url = @image_url,
               image_data = COALESCE(@image_data, image_data),
               image_mime_type = COALESCE(@image_mime_type, image_mime_type),
+              thumbnail_data = COALESCE(@thumbnail_data, thumbnail_data),
+              thumbnail_mime_type = COALESCE(@thumbnail_mime_type, thumbnail_mime_type),
               notes = @notes, logged_at = @logged_at
           OUTPUT INSERTED.*
           WHERE id = @id AND user_id = @user_id
@@ -234,16 +312,23 @@ router.put('/:id', async (req, res) => {
         image_url: image_url !== undefined ? image_url : store.meals[index].image_url,
         image_data: image_base64 !== undefined ? image_base64 : store.meals[index].image_data,
         image_mime_type: normalizedImageMimeType !== undefined ? normalizedImageMimeType : store.meals[index].image_mime_type,
+        thumbnail_data: thumbnailBuffer
+          ? `data:image/jpeg;base64,${thumbnailBuffer.toString('base64')}`
+          : store.meals[index].thumbnail_data,
+        thumbnail_mime_type: thumbnailBuffer ? 'image/jpeg' : store.meals[index].thumbnail_mime_type,
         notes: notes !== undefined ? notes : store.meals[index].notes,
         logged_at: logged_at ? new Date(logged_at).toISOString() : store.meals[index].logged_at,
       };
 
-      saveLocalStore(store);
+      await saveLocalStore(store);
       return res.json({ meal: toMealResponse(store.meals[index]), engine: 'local_fallback' });
     }
   } catch (err) {
     console.error('Error updating meal:', err);
-    return res.status(500).json({ error: 'Failed to update meal', details: err.message });
+    return res.status(err.statusCode || 500).json({
+      error: err.statusCode ? err.message : 'Failed to update meal',
+      ...(err.statusCode ? {} : { details: err.message }),
+    });
   }
 });
 
@@ -265,7 +350,7 @@ router.delete('/:id', async (req, res) => {
     } else {
       const store = getLocalStore();
       store.meals = store.meals.filter(m => !(String(m.id) === String(mealId) && String(m.user_id) === String(userId)));
-      saveLocalStore(store);
+      await saveLocalStore(store);
       return res.json({ message: 'Meal deleted successfully', id: mealId, engine: 'local_fallback' });
     }
   } catch (err) {
@@ -280,13 +365,21 @@ router.get('/:id/photo', async (req, res) => {
     const mealId = req.params.id;
     const engine = getEngine();
     const userId = req.user.id;
+    const useThumbnail = req.query.size !== 'original';
 
     if (engine === 'mssql') {
       const pool = getMssqlPool();
       const result = await pool.request()
         .input('id', sql.Int, parseInt(mealId, 10))
         .input('user_id', sql.Int, userId)
-        .query(`SELECT id, image_data, image_mime_type FROM Meals WHERE id = @id AND user_id = @user_id`);
+        .input('use_thumbnail', sql.Bit, useThumbnail)
+        .query(`
+          SELECT id,
+            CASE WHEN @use_thumbnail = 1 THEN COALESCE(thumbnail_data, image_data) ELSE image_data END AS image_data,
+            CASE WHEN @use_thumbnail = 1 THEN COALESCE(thumbnail_mime_type, image_mime_type) ELSE image_mime_type END AS image_mime_type
+          FROM Meals
+          WHERE id = @id AND user_id = @user_id
+        `);
 
       const meal = result.recordset?.[0];
       if (!meal || !meal.image_data) {
@@ -294,21 +387,27 @@ router.get('/:id/photo', async (req, res) => {
       }
 
       res.setHeader('Content-Type', meal.image_mime_type || 'image/jpeg');
+      res.setHeader('Cache-Control', 'private, max-age=86400');
       return res.send(meal.image_data);
     }
 
     const store = getLocalStore();
     const meal = store.meals.find(m => String(m.id) === String(mealId) && String(m.user_id) === String(userId));
-    if (!meal || !meal.image_data) {
+    const base64Payload = useThumbnail
+      ? (meal?.thumbnail_data || meal?.image_data)
+      : meal?.image_data;
+    if (!meal || !base64Payload) {
       return res.status(404).json({ error: 'Meal image not found' });
     }
 
-    const base64Payload = meal.image_data;
     const mimeMatch = base64Payload.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
-    const mimeType = meal.image_mime_type || mimeMatch?.[1] || 'image/jpeg';
+    const mimeType = (useThumbnail ? meal.thumbnail_mime_type : meal.image_mime_type)
+      || mimeMatch?.[1]
+      || 'image/jpeg';
     const buffer = Buffer.from(base64Payload.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, ''), 'base64');
 
     res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
     return res.send(buffer);
   } catch (err) {
     console.error('Error fetching meal image:', err);

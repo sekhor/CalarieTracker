@@ -1,28 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import Navbar from './components/Navbar';
-import AddMealModal from './components/AddMealModal';
 import AuthScreen from './components/AuthScreen';
 import DashboardView from './views/DashboardView';
-import AIScannerView from './views/AIScannerView';
-import CoachChatView from './views/CoachChatView';
-import NutritionProfileView from './views/NutritionProfileView';
-import MealLogView from './views/MealLogView';
-import AnalyticsView from './views/AnalyticsView';
-import InsightsView from './views/InsightsView';
-import KnowledgeView from './views/KnowledgeView';
-import PlannerView from './views/PlannerView';
+import { clearMealPhotoCache } from './services/mealPhotoCache';
 import useInstallPrompt from './hooks/useInstallPrompt';
+
+const AddMealModal = lazy(() => import('./components/AddMealModal'));
+const AIScannerView = lazy(() => import('./views/AIScannerView'));
+const CoachChatView = lazy(() => import('./views/CoachChatView'));
+const NutritionProfileView = lazy(() => import('./views/NutritionProfileView'));
+const MealLogView = lazy(() => import('./views/MealLogView'));
+const AnalyticsView = lazy(() => import('./views/AnalyticsView'));
+const InsightsView = lazy(() => import('./views/InsightsView'));
+const KnowledgeView = lazy(() => import('./views/KnowledgeView'));
+const PlannerView = lazy(() => import('./views/PlannerView'));
 
 import {
   fetchDashboardStats,
   fetchMeals,
-  fetchSettings,
   createMeal,
   updateMeal,
   deleteMeal,
   saveGoalSettings,
   clearAuthSession,
   fetchCurrentUser,
+  logoutUser,
   getStoredToken,
   getStoredUser,
 } from './services/api';
@@ -32,47 +34,44 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(getStoredUser());
   const [stats, setStats]             = useState(null);
   const [meals, setMeals]             = useState([]);
-  const [settingsData, setSettings]   = useState(null);
+  const [mealsLoaded, setMealsLoaded] = useState(false);
+  const [isMealsLoading, setMealsLoading] = useState(false);
+  const [mealLoadError, setMealLoadError] = useState('');
+  const [isDashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState('');
   const [isModalOpen, setModalOpen]   = useState(false);
   const [editingMeal, setEditingMeal] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const { canInstall, promptInstall } = useInstallPrompt();
 
-  const loadAll = async () => {
+  const loadDashboard = useCallback(async () => {
+    setDashboardLoading(true);
+    setDashboardError('');
     try {
-      const [statsRes, mealsRes, settingsRes] = await Promise.all([
-        fetchDashboardStats(),
-        fetchMeals(),
-        fetchSettings(),
-      ]);
+      const statsRes = await fetchDashboardStats();
       setStats(statsRes);
-      setMeals(mealsRes.meals || []);
-      setSettings(settingsRes);
-
-      // Seed sample meals on first empty launch
-      // if ((!mealsRes.meals || mealsRes.meals.length === 0)) {
-      //   await seedSamples();
-      // }
     } catch (e) {
-      console.error('Init load error:', e);
+      console.error('Dashboard load error:', e);
+      setDashboardError(e.response?.data?.error || 'Unable to load dashboard data.');
+    } finally {
+      setDashboardLoading(false);
     }
-  };
+  }, []);
 
-  const seedSamples = async () => {
-    const samples = [
-      { meal_name: 'Avocado Egg Toast', meal_type: 'Breakfast', calories: 380, protein_g: 16.5, carbs_g: 32, fat_g: 22, notes: 'Multigrain sourdough with organic eggs', logged_at: new Date().toISOString() },
-      { meal_name: 'Grilled Salmon Bowl', meal_type: 'Lunch', calories: 590, protein_g: 44, carbs_g: 48, fat_g: 24, notes: 'Wild Atlantic salmon with brown rice and broccoli', logged_at: new Date().toISOString() },
-      { meal_name: 'Greek Yogurt Parfait', meal_type: 'Snack', calories: 290, protein_g: 21, carbs_g: 39, fat_g: 5, notes: 'Non-fat Greek yogurt with blueberries and granola', logged_at: new Date().toISOString() },
-    ];
+  const loadMeals = useCallback(async () => {
+    setMealsLoading(true);
+    setMealLoadError('');
     try {
-      for (const s of samples) await createMeal(s);
-      const [statsRes, mealsRes] = await Promise.all([fetchDashboardStats(), fetchMeals()]);
-      setStats(statsRes);
+      const mealsRes = await fetchMeals();
       setMeals(mealsRes.meals || []);
+      setMealsLoaded(true);
     } catch (e) {
-      console.warn('Seeding failed:', e);
+      console.error('Meal log load error:', e);
+      setMealLoadError(e.response?.data?.error || 'Unable to load meal history.');
+    } finally {
+      setMealsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const bootstrapAuth = async () => {
@@ -85,33 +84,52 @@ export default function App() {
       try {
         const response = await fetchCurrentUser();
         setCurrentUser(response.user);
-        await loadAll();
+        setAuthChecked(true);
+        loadDashboard();
       } catch (error) {
-        clearAuthSession();
-        setCurrentUser(null);
+        if (error.response?.status === 401) {
+          clearAuthSession();
+          setCurrentUser(null);
+        } else {
+          setDashboardError(error.response?.data?.error || 'The server is still starting. Please retry shortly.');
+        }
       } finally {
         setAuthChecked(true);
       }
     };
 
     bootstrapAuth();
-  }, []);
+  }, [loadDashboard]);
 
-  const handleAuthenticated = async (user) => {
+  useEffect(() => {
+    if (currentUser && activeTab === 'log' && !mealsLoaded) {
+      loadMeals();
+    }
+  }, [activeTab, currentUser, loadMeals, mealsLoaded]);
+
+  const handleAuthenticated = (user) => {
     setCurrentUser(user);
     setAuthChecked(true);
-    await loadAll();
+    loadDashboard();
   };
 
-  const handleLogout = () => {
-    clearAuthSession();
-    setCurrentUser(null);
-    setStats(null);
-    setMeals([]);
-    setSettings(null);
-    setModalOpen(false);
-    setEditingMeal(null);
-    setActiveTab('dashboard');
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch (error) {
+      console.warn('Server logout failed; clearing the local session.', error);
+    } finally {
+      clearMealPhotoCache();
+      clearAuthSession();
+      setCurrentUser(null);
+      setStats(null);
+      setMeals([]);
+      setMealsLoaded(false);
+      setMealLoadError('');
+      setModalOpen(false);
+      setEditingMeal(null);
+      setActiveTab('dashboard');
+    }
   };
 
   if (!authChecked) {
@@ -126,9 +144,13 @@ export default function App() {
     try {
       if (editingMeal) await updateMeal(editingMeal.id, data);
       else await createMeal(data);
+      clearMealPhotoCache();
       setModalOpen(false);
       setEditingMeal(null);
-      await loadAll();
+      await Promise.all([
+        loadDashboard(),
+        ...(mealsLoaded ? [loadMeals()] : []),
+      ]);
     } catch (e) {
       console.error('Save meal error:', e);
     }
@@ -136,7 +158,11 @@ export default function App() {
 
   const handleDelete = async (id) => {
     if (window.confirm('Delete this meal record?')) {
-      try { await deleteMeal(id); await loadAll(); }
+      try {
+        await deleteMeal(id);
+        clearMealPhotoCache();
+        await Promise.all([loadDashboard(), loadMeals()]);
+      }
       catch (e) { console.error('Delete error:', e); }
     }
   };
@@ -146,7 +172,7 @@ export default function App() {
   const handleSaveGoals = async (goals) => {
     try {
       await saveGoalSettings(goals);
-      await loadAll();
+      await loadDashboard();
     } catch (error) {
       console.error('Save goals error:', error);
       throw error;
@@ -166,7 +192,6 @@ export default function App() {
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        dbStatus={settingsData?.database}
         onOpenAddModal={openAdd}
         currentUser={currentUser}
         onLogout={handleLogout}
@@ -175,16 +200,29 @@ export default function App() {
       />
 
       <main className="main-content">
+        <Suspense fallback={<div className="glass-panel loading-panel">Loading view…</div>}>
         {activeTab === 'dashboard' && (
           <DashboardView
             stats={stats}
+            isLoading={isDashboardLoading}
+            error={dashboardError}
+            onRetry={loadDashboard}
             onNavigate={setActiveTab}
             onOpenAddModal={openAdd}
             onSaveGoals={handleSaveGoals}
           />
         )}
         {activeTab === 'scanner' && (
-          <AIScannerView onSaveSuccess={loadAll} onNavigate={setActiveTab} />
+          <AIScannerView
+            onSaveSuccess={() => {
+              clearMealPhotoCache();
+              return Promise.all([
+                loadDashboard(),
+                ...(mealsLoaded ? [loadMeals()] : []),
+              ]);
+            }}
+            onNavigate={setActiveTab}
+          />
         )}
         {activeTab === 'coach' && (
           <CoachChatView />
@@ -202,23 +240,37 @@ export default function App() {
           <PlannerView />
         )}
         {activeTab === 'log' && (
-          <MealLogView meals={meals} onRefresh={loadAll} onEditMeal={handleEdit} onDeleteMeal={handleDelete} onOpenAddModal={openAdd} />
+          mealsLoaded
+            ? <MealLogView meals={meals} onRefresh={loadMeals} onEditMeal={handleEdit} onDeleteMeal={handleDelete} onOpenAddModal={openAdd} />
+            : mealLoadError
+              ? (
+                <div className="glass-panel loading-panel">
+                  <span>{mealLoadError}</span>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={loadMeals}>Retry</button>
+                </div>
+              )
+              : <div className="glass-panel loading-panel">{isMealsLoading ? 'Loading meal history…' : 'Preparing meal history…'}</div>
         )}
         {activeTab === 'analytics' && (
           <AnalyticsView stats={stats} />
         )}
+        </Suspense>
       </main>
 
       <footer className="app-footer">
         CalorieAI &bull; React · Node.js
       </footer>
 
-      <AddMealModal
-        isOpen={isModalOpen}
-        onClose={() => { setModalOpen(false); setEditingMeal(null); }}
-        onSave={handleSaveMeal}
-        initialData={editingMeal}
-      />
+      {isModalOpen ? (
+        <Suspense fallback={null}>
+          <AddMealModal
+            isOpen={isModalOpen}
+            onClose={() => { setModalOpen(false); setEditingMeal(null); }}
+            onSave={handleSaveMeal}
+            initialData={editingMeal}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

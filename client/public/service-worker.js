@@ -1,4 +1,4 @@
-const CACHE_NAME = 'calorieai-v1'
+const CACHE_NAME = 'calorieai-v2'
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',
@@ -9,10 +9,7 @@ const APP_SHELL = [
 ]
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)),
-  )
-  self.skipWaiting()
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)))
 })
 
 self.addEventListener('activate', (event) => {
@@ -21,43 +18,44 @@ self.addEventListener('activate', (event) => {
       Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))),
     ),
   )
-  self.clients.claim()
 })
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') {
-    return
-  }
-
   const { request } = event
-  if (!request.url.startsWith(self.location.origin)) {
-    return
-  }
+  if (request.method !== 'GET' || !request.url.startsWith(self.location.origin)) return
+
+  const url = new URL(request.url)
+
+  // Authenticated/user-specific API data must never be stored in a shared
+  // service-worker cache. This also prevents stale dashboard and photo data.
+  if (url.pathname.startsWith('/api/')) return
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match('/').then((response) => response || caches.match('/index.html'))),
+      fetch(request)
+        .then((response) => {
+          const contentType = response.headers.get('content-type') || ''
+          if (response.ok && contentType.includes('text/html')) {
+            caches.open(CACHE_NAME).then((cache) => cache.put('/', response.clone()))
+          }
+          return response
+        })
+        .catch(() => caches.match('/')),
     )
     return
   }
 
+  const isStaticAsset = url.pathname.startsWith('/assets/')
+    || APP_SHELL.includes(url.pathname)
+
+  if (!isStaticAsset) return
+
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse
+    caches.match(request).then((cachedResponse) => cachedResponse || fetch(request).then((networkResponse) => {
+      if (networkResponse.ok) {
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse.clone()))
       }
-
-      return fetch(request)
-        .then((networkResponse) => {
-          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-            return networkResponse
-          }
-
-          const responseClone = networkResponse.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone))
-          return networkResponse
-        })
-        .catch(() => caches.match('/favicon.svg'))
-    }),
+      return networkResponse
+    })),
   )
 })

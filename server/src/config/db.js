@@ -12,6 +12,9 @@ const DEFAULT_GOALS = {
 let mssqlPool = null;
 let currentEngine = 'local_fallback'; // 'mssql' or 'local_fallback'
 let lastConnectionError = null;
+let connectionState = 'idle'; // idle, connecting, ready, fallback
+let localStoreCache = null;
+let localStoreWriteChain = Promise.resolve();
 
 // JSON File Storage Path for fallback
 const dataDir = path.join(__dirname, '../../data');
@@ -37,11 +40,15 @@ function ensureLocalStore() {
 }
 
 function getLocalStore() {
+  if (localStoreCache) {
+    return localStoreCache;
+  }
+
   ensureLocalStore();
   try {
     const raw = fs.readFileSync(jsonDbPath, 'utf8');
     const parsed = JSON.parse(raw);
-    return {
+    localStoreCache = {
       meals: Array.isArray(parsed.meals) ? parsed.meals : [],
       users: Array.isArray(parsed.users) ? parsed.users : [],
       user_settings: parsed.user_settings && typeof parsed.user_settings === 'object' ? parsed.user_settings : {},
@@ -52,7 +59,7 @@ function getLocalStore() {
       coach_memories: Array.isArray(parsed.coach_memories) ? parsed.coach_memories : [],
     };
   } catch (e) {
-    return {
+    localStoreCache = {
       meals: [],
       users: [],
       user_settings: {},
@@ -63,11 +70,32 @@ function getLocalStore() {
       coach_memories: [],
     };
   }
+
+  return localStoreCache;
 }
 
 function saveLocalStore(data) {
   ensureLocalStore();
-  fs.writeFileSync(jsonDbPath, JSON.stringify(data, null, 2));
+  localStoreCache = data;
+  const currentWrite = localStoreWriteChain
+    .catch(() => {})
+    .then(async () => {
+      const tempPath = `${jsonDbPath}.tmp`;
+      const serialized = JSON.stringify(localStoreCache, null, 2);
+      await fs.promises.writeFile(tempPath, serialized);
+      await fs.promises.rename(tempPath, jsonDbPath);
+    });
+
+  // Keep the queue usable after a failed write, but let the current caller
+  // observe the failure instead of reporting a successful API mutation.
+  localStoreWriteChain = currentWrite.catch((error) => {
+    console.error('Failed to persist local fallback store:', error.message);
+  });
+  return currentWrite;
+}
+
+function flushLocalStoreWrites() {
+  return localStoreWriteChain;
 }
 
 // Default MSSQL connection config
@@ -77,32 +105,50 @@ let mssqlConfig = {
   server: process.env.MSSQL_SERVER || 'localhost',
   port: parseInt(process.env.MSSQL_PORT || '1433', 10),
   database: process.env.MSSQL_DATABASE || 'CalorieTrackerDB',
+  connectionTimeout: parseInt(process.env.MSSQL_CONNECT_TIMEOUT_MS || '8000', 10),
+  requestTimeout: parseInt(process.env.MSSQL_REQUEST_TIMEOUT_MS || '15000', 10),
   options: {
     encrypt: process.env.MSSQL_ENCRYPT === 'true',
     trustServerCertificate: process.env.MSSQL_TRUST_CERT !== 'false',
-    connectTimeout: 50000,
   },
 };
 
 // Attempt to connect to MSSQL
-async function connectMSSQL(configOverride = null) {
+async function connectMSSQL(configOverride = null, options = {}) {
   const configToUse = configOverride || mssqlConfig;
+  const initializeSchema = options.initializeSchema
+    ?? process.env.MSSQL_AUTO_MIGRATE !== 'false';
+  const fallbackOnFailure = options.fallbackOnFailure !== false;
+  let nextPool = null;
+  connectionState = 'connecting';
   try {
     if (mssqlPool) {
       try { await mssqlPool.close(); } catch (e) {}
     }
-    mssqlPool = await new sql.ConnectionPool(configToUse).connect();
+    nextPool = await new sql.ConnectionPool(configToUse).connect();
+    if (initializeSchema) {
+      await initMSSQLTables(nextPool);
+    }
+
+    mssqlPool = nextPool;
     currentEngine = 'mssql';
+    connectionState = 'ready';
     lastConnectionError = null;
     mssqlConfig = configToUse;
-
-    await initMSSQLTables(mssqlPool);
     console.log('Successfully connected to MSSQL Database!');
     return { success: true, engine: 'mssql' };
   } catch (err) {
-    console.warn('MSSQL connection failed, using resilient local storage fallback:', err.message);
+    if (nextPool) {
+      try { await nextPool.close(); } catch {}
+    }
+    console.warn(
+      fallbackOnFailure
+        ? `MSSQL connection failed, using resilient local storage fallback: ${err.message}`
+        : `MSSQL connection attempt failed: ${err.message}`,
+    );
     lastConnectionError = err.message;
     currentEngine = 'local_fallback';
+    connectionState = fallbackOnFailure ? 'fallback' : 'connecting';
     mssqlPool = null;
     ensureLocalStore();
     return { success: false, engine: 'local_fallback', error: err.message };
@@ -139,6 +185,8 @@ async function initMSSQLTables(pool) {
         [image_url] NVARCHAR(MAX) NULL,
         [image_data] VARBINARY(MAX) NULL,
         [image_mime_type] NVARCHAR(100) NULL,
+        [thumbnail_data] VARBINARY(MAX) NULL,
+        [thumbnail_mime_type] NVARCHAR(100) NULL,
         [notes] NVARCHAR(MAX) NULL,
         [logged_at] DATETIME2 NOT NULL,
         [created_at] DATETIME2 DEFAULT GETDATE(),
@@ -159,6 +207,16 @@ async function initMSSQLTables(pool) {
     IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Meals]') AND name = 'image_mime_type')
     BEGIN
       ALTER TABLE [dbo].[Meals] ADD [image_mime_type] NVARCHAR(100) NULL;
+    END;
+
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Meals]') AND name = 'thumbnail_data')
+    BEGIN
+      ALTER TABLE [dbo].[Meals] ADD [thumbnail_data] VARBINARY(MAX) NULL;
+    END;
+
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Meals]') AND name = 'thumbnail_mime_type')
+    BEGIN
+      ALTER TABLE [dbo].[Meals] ADD [thumbnail_mime_type] NVARCHAR(100) NULL;
     END;
 
     IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[UserSettings]') AND type in (N'U'))
@@ -182,6 +240,25 @@ async function initMSSQLTables(pool) {
     )
     BEGIN
       CREATE UNIQUE INDEX [UX_UserSettings_UserKey] ON [dbo].[UserSettings]([user_id], [setting_key]);
+    END;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM sys.indexes
+      WHERE name = 'IX_Users_TokenHash' AND object_id = OBJECT_ID(N'[dbo].[Users]')
+    )
+    BEGIN
+      CREATE INDEX [IX_Users_TokenHash] ON [dbo].[Users]([token_hash])
+      WHERE [token_hash] IS NOT NULL;
+    END;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM sys.indexes
+      WHERE name = 'IX_Meals_User_LoggedAt' AND object_id = OBJECT_ID(N'[dbo].[Meals]')
+    )
+    BEGIN
+      CREATE INDEX [IX_Meals_User_LoggedAt]
+      ON [dbo].[Meals]([user_id], [logged_at] DESC)
+      INCLUDE ([meal_name], [meal_type], [calories], [protein_g], [carbs_g], [fat_g], [image_url], [image_mime_type]);
     END;
 
     IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[UserNutritionProfiles]') AND type in (N'U'))
@@ -251,6 +328,20 @@ async function initMSSQLTables(pool) {
       );
     END;
 
+    IF NOT EXISTS (
+      SELECT 1 FROM sys.indexes
+      WHERE name = 'IX_ChatSessions_User_UpdatedAt' AND object_id = OBJECT_ID(N'[dbo].[ChatSessions]')
+    )
+      CREATE INDEX [IX_ChatSessions_User_UpdatedAt]
+      ON [dbo].[ChatSessions]([user_id], [updated_at] DESC);
+
+    IF NOT EXISTS (
+      SELECT 1 FROM sys.indexes
+      WHERE name = 'IX_ChatMessages_User_Session_CreatedAt' AND object_id = OBJECT_ID(N'[dbo].[ChatMessages]')
+    )
+      CREATE INDEX [IX_ChatMessages_User_Session_CreatedAt]
+      ON [dbo].[ChatMessages]([user_id], [session_id], [created_at]);
+
     IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[KnowledgeDocuments]') AND type in (N'U'))
     BEGIN
       CREATE TABLE KnowledgeDocuments (
@@ -279,6 +370,20 @@ async function initMSSQLTables(pool) {
         [updated_at] DATETIME2 DEFAULT GETDATE()
       );
     END;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM sys.indexes
+      WHERE name = 'IX_KnowledgeDocuments_User_CreatedAt' AND object_id = OBJECT_ID(N'[dbo].[KnowledgeDocuments]')
+    )
+      CREATE INDEX [IX_KnowledgeDocuments_User_CreatedAt]
+      ON [dbo].[KnowledgeDocuments]([user_id], [created_at] DESC);
+
+    IF NOT EXISTS (
+      SELECT 1 FROM sys.indexes
+      WHERE name = 'IX_CoachMemories_User_UpdatedAt' AND object_id = OBJECT_ID(N'[dbo].[CoachMemories]')
+    )
+      CREATE INDEX [IX_CoachMemories_User_UpdatedAt]
+      ON [dbo].[CoachMemories]([user_id], [updated_at] DESC);
 
   `);
 
@@ -347,7 +452,7 @@ async function createUser({ email, name, passwordHash, tokenHash }) {
   if (!store.user_settings[String(nextId)]) {
     store.user_settings[String(nextId)] = { daily_goals: getDefaultGoals() };
   }
-  saveLocalStore(store);
+  await saveLocalStore(store);
   return { id: user.id, email: user.email, name: user.name };
 }
 
@@ -364,7 +469,7 @@ async function updateUserToken(userId, tokenHash) {
   const user = store.users.find((item) => String(item.id) === String(userId));
   if (user) {
     user.token_hash = tokenHash;
-    saveLocalStore(store);
+    await saveLocalStore(store);
   }
 }
 
@@ -411,7 +516,7 @@ async function saveUserGoals(userId, goalsObj) {
     store.user_settings[String(userId)] = {};
   }
   store.user_settings[String(userId)].daily_goals = goalsObj;
-  saveLocalStore(store);
+  await saveLocalStore(store);
 }
 
 async function getUserNutritionProfile(userId) {
@@ -507,7 +612,7 @@ async function saveUserNutritionProfile(userId, profile) {
 
   const store = getLocalStore();
   store.user_profiles[String(userId)] = normalizedProfile;
-  saveLocalStore(store);
+  await saveLocalStore(store);
   return normalizedProfile;
 }
 
@@ -529,7 +634,7 @@ async function createChatSession(userId, title = 'New Coach Chat') {
   const now = new Date().toISOString();
   const session = { id: nextId, user_id: userId, title, created_at: now, updated_at: now };
   store.chat_sessions.push(session);
-  saveLocalStore(store);
+  await saveLocalStore(store);
   return session;
 }
 
@@ -546,7 +651,7 @@ async function updateChatSessionTimestamp(userId, sessionId) {
   const session = store.chat_sessions.find((item) => String(item.id) === String(sessionId) && String(item.user_id) === String(userId));
   if (session) {
     session.updated_at = new Date().toISOString();
-    saveLocalStore(store);
+    await saveLocalStore(store);
   }
 }
 
@@ -642,7 +747,7 @@ async function saveChatMessage({ sessionId, userId, role, content, messageType =
   if (session) {
     session.updated_at = createdAt;
   }
-  saveLocalStore(store);
+  await saveLocalStore(store);
   return message;
 }
 
@@ -684,7 +789,7 @@ async function saveKnowledgeDocument({ userId, title, docType = 'note', sourceNa
     created_at: new Date().toISOString(),
   };
   store.knowledge_documents.push(document);
-  saveLocalStore(store);
+  await saveLocalStore(store);
   return document;
 }
 
@@ -761,7 +866,7 @@ async function saveCoachMemory({ userId, memoryType, title, summary, metadata = 
       metadata,
       updated_at: timestamp,
     };
-    saveLocalStore(store);
+    await saveLocalStore(store);
     return store.coach_memories[existingIndex];
   }
 
@@ -777,7 +882,7 @@ async function saveCoachMemory({ userId, memoryType, title, summary, metadata = 
     updated_at: timestamp,
   };
   store.coach_memories.push(memory);
-  saveLocalStore(store);
+  await saveLocalStore(store);
   return memory;
 }
 
@@ -805,6 +910,7 @@ async function getCoachMemories(userId, limit = 10) {
 function getDbStatus() {
   return {
     engine: currentEngine,
+    connectionState,
     mssqlConnected: currentEngine === 'mssql',
     config: {
       server: mssqlConfig.server,
@@ -842,4 +948,6 @@ module.exports = {
   getMssqlPool: () => mssqlPool,
   getEngine: () => currentEngine,
   getMssqlConfig: () => mssqlConfig,
+  initMSSQLTables,
+  flushLocalStoreWrites,
 };

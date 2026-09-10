@@ -5,7 +5,7 @@ const {
   findUserByEmail,
   updateUserToken,
 } = require('../config/db');
-const { requireAuth } = require('../middleware/auth');
+const { invalidateCachedUser, requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -71,6 +71,7 @@ router.post('/login', async (req, res) => {
 
     const rawToken = createToken();
     const tokenHash = hashValue(rawToken);
+    invalidateCachedUser(user.id);
     await updateUserToken(user.id, tokenHash);
 
     return res.json({
@@ -88,6 +89,16 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', requireAuth, (req, res) => {
   return res.json({ user: req.user });
+});
+
+router.post('/logout', requireAuth, async (req, res) => {
+  try {
+    await updateUserToken(req.user.id, null);
+    invalidateCachedUser(req.user.id);
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to log out.', details: error.message });
+  }
 });
 
 module.exports = router;

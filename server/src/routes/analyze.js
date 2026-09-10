@@ -46,8 +46,6 @@ router.post('/', upload.single('photo'), async (req, res) => {
     return res.json({
       success: true,
       analysis,
-      image_base64: `data:${mimeType};base64,${imageBuffer.toString('base64')}`,
-      image_mime_type: mimeType,
     });
   } catch (err) {
     console.error('Meal analysis endpoint error:', err);
