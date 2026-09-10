@@ -14,7 +14,11 @@ export default function AddMealModal({ isOpen, onClose, onSave, initialData = nu
     logged_at: toMalaysiaDateTimeLocalValue(),
   });
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
   useEffect(() => {
+    setSaveError('');
     if (initialData) {
       setFormData({
         meal_name: initialData.meal_name || '',
@@ -44,16 +48,25 @@ export default function AddMealModal({ isOpen, onClose, onSave, initialData = nu
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave({
-      ...formData,
-      calories: Number(formData.calories || 0),
-      protein_g: Number(formData.protein_g || 0),
-      carbs_g: Number(formData.carbs_g || 0),
-      fat_g: Number(formData.fat_g || 0),
-      logged_at: malaysiaDateTimeLocalToIso(formData.logged_at),
-    });
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      await onSave({
+        ...formData,
+        calories: Number(formData.calories || 0),
+        protein_g: Number(formData.protein_g || 0),
+        carbs_g: Number(formData.carbs_g || 0),
+        fat_g: Number(formData.fat_g || 0),
+        logged_at: malaysiaDateTimeLocalToIso(formData.logged_at),
+      });
+    } catch (err) {
+      console.error('Modal meal save error:', err);
+      setSaveError(err.response?.data?.error || err.message || 'Failed to save meal record.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -180,13 +193,19 @@ export default function AddMealModal({ isOpen, onClose, onSave, initialData = nu
             />
           </div>
 
+          {saveError ? (
+            <div className="info-box info-box-error" style={{ margin: '0.75rem 0' }}>
+              <span>{saveError}</span>
+            </div>
+          ) : null}
+
           <div className="modal-actions">
-            <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">
+            <button type="button" onClick={onClose} disabled={isSaving} className="btn btn-secondary btn-sm">
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary btn-sm">
+            <button type="submit" disabled={isSaving} className="btn btn-primary btn-sm">
               <Save size={15} />
-              {initialData ? 'Update Record' : 'Save Meal'}
+              {isSaving ? 'Saving...' : initialData ? 'Update Record' : 'Save Meal'}
             </button>
           </div>
         </form>

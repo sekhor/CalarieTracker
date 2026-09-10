@@ -102,10 +102,16 @@ export default function App() {
   }, [loadDashboard]);
 
   useEffect(() => {
-    if (currentUser && activeTab === 'log' && !mealsLoaded) {
+    if (currentUser && activeTab === 'dashboard') {
+      loadDashboard();
+    }
+  }, [activeTab, currentUser, loadDashboard]);
+
+  useEffect(() => {
+    if (currentUser && activeTab === 'log') {
       loadMeals();
     }
-  }, [activeTab, currentUser, loadMeals, mealsLoaded]);
+  }, [activeTab, currentUser, loadMeals]);
 
   const handleAuthenticated = (user) => {
     setCurrentUser(user);
@@ -141,19 +147,18 @@ export default function App() {
   }
 
   const handleSaveMeal = async (data) => {
-    try {
-      if (editingMeal) await updateMeal(editingMeal.id, data);
-      else await createMeal(data);
-      clearMealPhotoCache();
-      setModalOpen(false);
-      setEditingMeal(null);
-      await Promise.all([
-        loadDashboard(),
-        ...(mealsLoaded ? [loadMeals()] : []),
-      ]);
-    } catch (e) {
-      console.error('Save meal error:', e);
+    if (editingMeal) {
+      await updateMeal(editingMeal.id, data);
+    } else {
+      await createMeal(data);
     }
+    clearMealPhotoCache();
+    setModalOpen(false);
+    setEditingMeal(null);
+    await Promise.all([
+      loadDashboard(),
+      loadMeals(),
+    ]);
   };
 
   const handleDelete = async (id) => {
@@ -209,7 +214,6 @@ export default function App() {
             onRetry={loadDashboard}
             onNavigate={setActiveTab}
             onOpenAddModal={openAdd}
-            onSaveGoals={handleSaveGoals}
           />
         )}
         {activeTab === 'scanner' && (
@@ -228,7 +232,9 @@ export default function App() {
           <CoachChatView />
         )}
         {activeTab === 'profile' && (
-          <NutritionProfileView />
+          <NutritionProfileView
+            onProfileSaved={loadDashboard}
+          />
         )}
         {activeTab === 'insights' && (
           <InsightsView />

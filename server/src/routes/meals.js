@@ -175,6 +175,10 @@ router.post('/', uploadMealPhoto, async (req, res) => {
     const engine = getEngine();
     const userId = req.user.id;
 
+    const parsedLoggedAt = (logged_at && !Number.isNaN(new Date(logged_at).getTime()))
+      ? new Date(logged_at)
+      : new Date();
+
     if (engine === 'mssql') {
       const pool = getMssqlPool();
       const result = await pool.request()
@@ -191,7 +195,7 @@ router.post('/', uploadMealPhoto, async (req, res) => {
         .input('thumbnail_data', sql.VarBinary(sql.MAX), thumbnailBuffer)
         .input('thumbnail_mime_type', sql.NVarChar, thumbnailBuffer ? 'image/jpeg' : null)
         .input('notes', sql.NVarChar, notes)
-        .input('logged_at', sql.DateTime2, new Date(logged_at))
+        .input('logged_at', sql.DateTime2, parsedLoggedAt)
         .query(`
           INSERT INTO Meals (user_id, meal_name, meal_type, calories, protein_g, carbs_g, fat_g, image_url, image_data, image_mime_type, thumbnail_data, thumbnail_mime_type, notes, logged_at)
           OUTPUT INSERTED.*
@@ -222,7 +226,7 @@ router.post('/', uploadMealPhoto, async (req, res) => {
           : null,
         thumbnail_mime_type: thumbnailBuffer ? 'image/jpeg' : null,
         notes,
-        logged_at: new Date(logged_at).toISOString(),
+        logged_at: parsedLoggedAt.toISOString(),
         created_at: new Date().toISOString(),
       };
 
@@ -258,6 +262,10 @@ router.put('/:id', async (req, res) => {
     }
     const thumbnailBuffer = await createThumbnail(imageBuffer);
 
+    const parsedLoggedAt = (logged_at && !Number.isNaN(new Date(logged_at).getTime()))
+      ? new Date(logged_at)
+      : undefined;
+
     if (engine === 'mssql') {
       const pool = getMssqlPool();
       const result = await pool.request()
@@ -275,7 +283,7 @@ router.put('/:id', async (req, res) => {
         .input('thumbnail_data', sql.VarBinary(sql.MAX), thumbnailBuffer)
         .input('thumbnail_mime_type', sql.NVarChar, thumbnailBuffer ? 'image/jpeg' : null)
         .input('notes', sql.NVarChar, notes)
-        .input('logged_at', sql.DateTime2, new Date(logged_at))
+        .input('logged_at', sql.DateTime2, parsedLoggedAt || new Date())
         .query(`
           UPDATE Meals
           SET meal_name = @meal_name, meal_type = @meal_type, calories = @calories,
@@ -296,7 +304,7 @@ router.put('/:id', async (req, res) => {
       return res.json({ meal: toMealResponse(result.recordset[0]), engine: 'mssql' });
     } else {
       const store = getLocalStore();
-      const index = store.meals.findIndex(m => String(m.id) === String(mealId) && String(m.user_id) === String(userId));
+      const index = store.meals.findIndex(m => String(m.id) === String(mealId) && (String(m.user_id) === String(userId) || (!m.user_id && String(userId) === '1')));
       if (index === -1) {
         return res.status(404).json({ error: 'Meal record not found' });
       }
@@ -317,7 +325,7 @@ router.put('/:id', async (req, res) => {
           : store.meals[index].thumbnail_data,
         thumbnail_mime_type: thumbnailBuffer ? 'image/jpeg' : store.meals[index].thumbnail_mime_type,
         notes: notes !== undefined ? notes : store.meals[index].notes,
-        logged_at: logged_at ? new Date(logged_at).toISOString() : store.meals[index].logged_at,
+        logged_at: parsedLoggedAt ? parsedLoggedAt.toISOString() : store.meals[index].logged_at,
       };
 
       await saveLocalStore(store);

@@ -48,10 +48,10 @@ router.get('/stats', async (req, res) => {
         pool.request()
           .input('user_id', sql.Int, userId)
           .input('cutoff', sql.DateTime2, cutoff)
-          .query(`SELECT ${DASHBOARD_MEAL_COLUMNS} FROM Meals WHERE user_id = @user_id AND logged_at >= @cutoff ORDER BY logged_at DESC`),
+          .query(`SELECT ${DASHBOARD_MEAL_COLUMNS} FROM Meals WHERE user_id = @user_id AND logged_at >= @cutoff ORDER BY logged_at DESC, id DESC`),
         pool.request()
           .input('user_id', sql.Int, userId)
-          .query(`SELECT TOP (5) ${DASHBOARD_MEAL_COLUMNS} FROM Meals WHERE user_id = @user_id ORDER BY logged_at DESC`),
+          .query(`SELECT TOP (6) ${DASHBOARD_MEAL_COLUMNS} FROM Meals WHERE user_id = @user_id ORDER BY logged_at DESC, id DESC`),
       ]);
       goals = resolvedGoals;
       meals = mealsRes.recordset || [];
@@ -60,12 +60,12 @@ router.get('/stats', async (req, res) => {
       const store = getLocalStore();
       goals = await getUserGoals(userId);
       const userMeals = (store.meals || [])
-        .filter((meal) => String(meal.user_id) === String(userId))
-        .sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at));
+        .filter((meal) => String(meal.user_id) === String(userId) || (!meal.user_id && String(userId) === '1'))
+        .sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at) || Number(b.id || 0) - Number(a.id || 0));
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - 8);
       meals = userMeals.filter((meal) => new Date(meal.logged_at) >= cutoff);
-      recentMeals = userMeals.slice(0, 5);
+      recentMeals = userMeals.slice(0, 6);
     }
 
     // Filter today's meals

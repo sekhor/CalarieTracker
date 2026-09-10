@@ -14,6 +14,8 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
   const [savedSuccess, setSavedSuccess]   = useState(false);
   const [errorMsg, setErrorMsg]           = useState('');
 
+  const [isSaving, setIsSaving]           = useState(false);
+
   const [editForm, setEditForm] = useState({
     meal_name: '', meal_type: 'Lunch',
     calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, notes: '',
@@ -73,6 +75,8 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
   };
 
   const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMsg('');
     try {
       const mealData = {
         meal_name: editForm.meal_name, meal_type: editForm.meal_type,
@@ -84,9 +88,12 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
       if (selectedFile) await createMealWithPhoto(mealData, selectedFile);
       else await createMeal(mealData);
       setSavedSuccess(true);
-      if (onSaveSuccess) onSaveSuccess();
-    } catch {
-      setErrorMsg('Failed to save meal record to database.');
+      if (onSaveSuccess) await onSaveSuccess();
+    } catch (err) {
+      console.error('Save meal error:', err);
+      setErrorMsg(err.response?.data?.error || err.message || 'Failed to save meal record to database.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -181,12 +188,15 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
                 </div>
 
                 {savedSuccess ? (
-                  <div className="analysis-saved-chip">
-                    <CheckCircle2 size={15} /> Saved to Database!
+                  <div className="analysis-saved-chip" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <CheckCircle2 size={15} /> Saved!
+                    <button onClick={() => onNavigate('dashboard')} className="btn btn-primary btn-sm" style={{ marginLeft: '0.5rem' }}>
+                      View Dashboard
+                    </button>
                   </div>
                 ) : (
-                  <button onClick={handleSave} className="btn btn-primary btn-sm">
-                    <Save size={14} /> Save to Database
+                  <button onClick={handleSave} disabled={isSaving} className="btn btn-primary btn-sm">
+                    <Save size={14} /> {isSaving ? 'Saving...' : 'Save to Database'}
                   </button>
                 )}
               </div>
@@ -262,8 +272,8 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
                 <div style={{ display: 'flex', gap: '0.625rem' }}>
                   <button className="btn btn-secondary btn-sm" onClick={() => onNavigate('dashboard')}>Dashboard</button>
                   {!savedSuccess && (
-                    <button className="btn btn-primary btn-sm" onClick={handleSave}>
-                      <Save size={14} /> Confirm & Save
+                    <button className="btn btn-primary btn-sm" disabled={isSaving} onClick={handleSave}>
+                      <Save size={14} /> {isSaving ? 'Saving...' : 'Confirm & Save'}
                     </button>
                   )}
                 </div>

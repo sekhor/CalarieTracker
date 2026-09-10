@@ -1,5 +1,5 @@
 const express = require('express');
-const { getUserNutritionProfile, saveUserNutritionProfile } = require('../config/db');
+const { getUserNutritionProfile, saveUserNutritionProfile, getUserGoals, saveUserGoals } = require('../config/db');
 
 const router = express.Router();
 
@@ -34,8 +34,11 @@ function normalizeProfilePayload(body = {}) {
 
 router.get('/', async (req, res) => {
   try {
-    const profile = await getUserNutritionProfile(req.user.id);
-    return res.json({ profile });
+    const [profile, goals] = await Promise.all([
+      getUserNutritionProfile(req.user.id),
+      getUserGoals(req.user.id),
+    ]);
+    return res.json({ profile, goals });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to load nutrition profile.', details: error.message });
   }
@@ -45,7 +48,30 @@ router.post('/', async (req, res) => {
   try {
     const profile = normalizeProfilePayload(req.body);
     const savedProfile = await saveUserNutritionProfile(req.user.id, profile);
-    return res.json({ message: 'Nutrition profile saved successfully.', profile: savedProfile });
+
+    let savedGoals = null;
+    if (
+      req.body.daily_calorie_target !== undefined ||
+      req.body.protein_target_g !== undefined ||
+      req.body.carbs_target_g !== undefined ||
+      req.body.fat_target_g !== undefined ||
+      req.body.goals
+    ) {
+      const g = req.body.goals || req.body;
+      savedGoals = {
+        daily_calorie_target: parseInt(g.daily_calorie_target || 2000, 10),
+        protein_target_g: parseFloat(g.protein_target_g || 140),
+        carbs_target_g: parseFloat(g.carbs_target_g || 225),
+        fat_target_g: parseFloat(g.fat_target_g || 65),
+      };
+      await saveUserGoals(req.user.id, savedGoals);
+    }
+
+    return res.json({
+      message: 'Profile and nutrition goals saved successfully.',
+      profile: savedProfile,
+      goals: savedGoals,
+    });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to save nutrition profile.', details: error.message });
   }

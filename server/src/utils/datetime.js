@@ -1,7 +1,10 @@
 const MALAYSIA_TIME_ZONE = 'Asia/Kuala_Lumpur';
 
 function getMalaysiaDateParts(dateInput = new Date()) {
-  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  let date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (Number.isNaN(date.getTime())) {
+    date = new Date();
+  }
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: MALAYSIA_TIME_ZONE,
     year: 'numeric',
