@@ -74,6 +74,16 @@ export const loginUser = async (payload) => {
   return res.data;
 };
 
+export const requestPasswordReset = async (payload) => {
+  const res = await api.post('/auth/forgot-password', payload);
+  return res.data;
+};
+
+export const resetPassword = async (payload) => {
+  const res = await api.post('/auth/reset-password', payload);
+  return res.data;
+};
+
 export const fetchCurrentUser = async ({ retries = 5 } = {}) => {
   let attempt = 0;
   while (attempt < retries) {

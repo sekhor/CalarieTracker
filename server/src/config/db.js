@@ -392,6 +392,10 @@ async function initMSSQLTables(pool) {
       ALTER TABLE ChatMessages ADD [insights_json] NVARCHAR(MAX) NULL;
     IF COL_LENGTH('ChatMessages', 'plan_json') IS NULL
       ALTER TABLE ChatMessages ADD [plan_json] NVARCHAR(MAX) NULL;
+    IF COL_LENGTH('dbo.Users', 'reset_token_hash') IS NULL
+      ALTER TABLE [dbo].[Users] ADD [reset_token_hash] NVARCHAR(255) NULL;
+    IF COL_LENGTH('dbo.Users', 'reset_token_expires_at') IS NULL
+      ALTER TABLE [dbo].[Users] ADD [reset_token_expires_at] DATETIME2 NULL;
   `);
 }
 
@@ -469,6 +473,76 @@ async function updateUserToken(userId, tokenHash) {
   const user = store.users.find((item) => String(item.id) === String(userId));
   if (user) {
     user.token_hash = tokenHash;
+    await saveLocalStore(store);
+  }
+}
+
+async function savePasswordResetToken(userId, resetTokenHash, expiresAt) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .input('reset_token_hash', sql.NVarChar, resetTokenHash)
+      .input('reset_token_expires_at', sql.DateTime2, expiresAt)
+      .query(`
+        UPDATE Users
+        SET reset_token_hash = @reset_token_hash,
+            reset_token_expires_at = @reset_token_expires_at
+        WHERE id = @user_id
+      `);
+    return;
+  }
+
+  const store = getLocalStore();
+  const user = store.users.find((item) => String(item.id) === String(userId));
+  if (user) {
+    user.reset_token_hash = resetTokenHash;
+    user.reset_token_expires_at = expiresAt.toISOString();
+    await saveLocalStore(store);
+  }
+}
+
+async function findUserByResetToken(resetTokenHash) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    const result = await mssqlPool.request()
+      .input('reset_token_hash', sql.NVarChar, resetTokenHash)
+      .query('SELECT TOP 1 id, email, name, reset_token_expires_at FROM Users WHERE reset_token_hash = @reset_token_hash');
+    return result.recordset?.[0] || null;
+  }
+
+  const store = getLocalStore();
+  return store.users.find((user) => user.reset_token_hash === resetTokenHash) || null;
+}
+
+async function clearPasswordResetToken(userId) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .query('UPDATE Users SET reset_token_hash = NULL, reset_token_expires_at = NULL WHERE id = @user_id');
+    return;
+  }
+
+  const store = getLocalStore();
+  const user = store.users.find((item) => String(item.id) === String(userId));
+  if (user) {
+    delete user.reset_token_hash;
+    delete user.reset_token_expires_at;
+    await saveLocalStore(store);
+  }
+}
+
+async function updateUserPassword(userId, passwordHash) {
+  if (currentEngine === 'mssql' && mssqlPool) {
+    await mssqlPool.request()
+      .input('user_id', sql.Int, userId)
+      .input('password_hash', sql.NVarChar, passwordHash)
+      .query('UPDATE Users SET password_hash = @password_hash WHERE id = @user_id');
+    return;
+  }
+
+  const store = getLocalStore();
+  const user = store.users.find((item) => String(item.id) === String(userId));
+  if (user) {
+    user.password_hash = passwordHash;
     await saveLocalStore(store);
   }
 }
@@ -927,6 +1001,7 @@ module.exports = {
   createChatSession,
   createUser,
   findUserByEmail,
+  findUserByResetToken,
   findUserByToken,
   getChatMessages,
   getChatSessions,
@@ -941,8 +1016,11 @@ module.exports = {
   saveCoachMemory,
   saveKnowledgeDocument,
   saveLocalStore,
+  savePasswordResetToken,
   saveUserNutritionProfile,
   saveUserGoals,
+  clearPasswordResetToken,
+  updateUserPassword,
   updateUserToken,
   updateChatSessionTimestamp,
   getMssqlPool: () => mssqlPool,

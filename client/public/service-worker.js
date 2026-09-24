@@ -1,4 +1,4 @@
-const CACHE_NAME = 'calorieai-v2'
+const CACHE_NAME = 'calorieai-v3'
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',

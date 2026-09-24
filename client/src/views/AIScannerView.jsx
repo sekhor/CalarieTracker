@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Camera, Upload, Sparkles, Flame, Dumbbell, Wheat, Droplet,
-  CheckCircle2, AlertCircle, RefreshCw, Save
+  CheckCircle2, AlertCircle, RefreshCw, Save, UtensilsCrossed
 } from 'lucide-react';
 import { analyzeMealPhoto, createMeal, createMealWithPhoto } from '../services/api';
 import { optimizeImageFile } from '../utils/images';
@@ -13,11 +13,32 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
   const [analysisResult, setAnalysis]     = useState(null);
   const [savedSuccess, setSavedSuccess]   = useState(false);
   const [errorMsg, setErrorMsg]           = useState('');
+  const [portionPct, setPortionPct]       = useState(100);
+
+  // baseValues stores the raw AI-estimated macros (100% portion)
+  const [baseValues, setBaseValues] = useState({
+    calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0,
+  });
 
   const [editForm, setEditForm] = useState({
     meal_name: '', meal_type: 'Lunch',
     calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, notes: '',
   });
+
+  // Recalculate macro display values based on current portionPct
+  const applyPortion = (base, pct) => ({
+    calories:  Math.round(base.calories  * pct / 100),
+    protein_g: Math.round(base.protein_g * pct / 100 * 10) / 10,
+    carbs_g:   Math.round(base.carbs_g   * pct / 100 * 10) / 10,
+    fat_g:     Math.round(base.fat_g     * pct / 100 * 10) / 10,
+  });
+
+  const handlePortionChange = (pct) => {
+    const newPct = Math.min(100, Math.max(1, Number(pct)));
+    setPortionPct(newPct);
+    setEditForm(prev => ({ ...prev, ...applyPortion(baseValues, newPct) }));
+    setSavedSuccess(false);
+  };
 
   const selectFile = async (file) => {
     setErrorMsg('');
@@ -33,6 +54,7 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
     reader.onloadend = () => setImagePreview(reader.result);
     reader.readAsDataURL(optimizedFile);
     setAnalysis(null); setSavedSuccess(false); setErrorMsg('');
+    setPortionPct(100);
   };
 
   const handleFileChange = (event) => {
@@ -54,15 +76,20 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
       else fd.append('image_base64', imagePreview);
       const res = await analyzeMealPhoto(fd);
       if (res.success && res.analysis) {
-        setAnalysis(res);
-        setEditForm({
-          meal_name: res.analysis.meal_name || 'Uploaded Meal',
-          meal_type: res.analysis.meal_type || 'Lunch',
+        const base = {
           calories:  res.analysis.total_calories || 0,
           protein_g: res.analysis.protein_g || 0,
           carbs_g:   res.analysis.carbs_g   || 0,
           fat_g:     res.analysis.fat_g     || 0,
-          notes:     res.analysis.notes     || '',
+        };
+        setBaseValues(base);
+        setPortionPct(100);
+        setAnalysis(res);
+        setEditForm({
+          meal_name: res.analysis.meal_name || 'Uploaded Meal',
+          meal_type: res.analysis.meal_type || 'Lunch',
+          ...base,
+          notes: res.analysis.notes || '',
         });
       } else setErrorMsg('Failed to get AI analysis.');
     } catch (err) {
@@ -203,27 +230,73 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
                 </div>
               )}
 
+              {/* Portion Selector */}
+              <div className="portion-selector">
+                <div className="portion-selector-header">
+                  <div className="portion-selector-label">
+                    <UtensilsCrossed size={13} />
+                    <span>Portion to Consume</span>
+                  </div>
+                  <div className="portion-selector-pct">
+                    <span className="portion-pct-val">{portionPct}</span>
+                    <span className="portion-pct-sign">%</span>
+                    {portionPct < 100 && (
+                      <span className="portion-badge-partial">Partial</span>
+                    )}
+                  </div>
+                </div>
+                <div className="portion-slider-wrap">
+                  <input
+                    type="range"
+                    min="1"
+                    max="100"
+                    step="1"
+                    value={portionPct}
+                    onChange={e => handlePortionChange(e.target.value)}
+                    className="portion-slider"
+                    style={{ '--portion-pct': `${portionPct}%` }}
+                  />
+                  <div className="portion-track-labels">
+                    <span>1%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+                <div className="portion-presets">
+                  {[25, 50, 75, 100].map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`portion-preset-btn${portionPct === p ? ' active' : ''}`}
+                      onClick={() => handlePortionChange(p)}
+                    >
+                      {p}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Macro Boxes */}
               <div className="macro-boxes">
                 <div className="macro-box">
                   <span className="macro-box-label" style={{ color: 'var(--amber)' }}><Flame size={12} /> Calories</span>
                   <span className="macro-box-val">{editForm.calories}</span>
-                  <span className="macro-box-unit">kcal</span>
+                  <span className="macro-box-unit">kcal{portionPct < 100 ? ` (of ${baseValues.calories})` : ''}</span>
                 </div>
                 <div className="macro-box">
                   <span className="macro-box-label" style={{ color: 'var(--emerald)' }}><Dumbbell size={12} /> Protein</span>
                   <span className="macro-box-val">{editForm.protein_g}</span>
-                  <span className="macro-box-unit">g</span>
+                  <span className="macro-box-unit">g{portionPct < 100 ? ` (of ${baseValues.protein_g})` : ''}</span>
                 </div>
                 <div className="macro-box">
                   <span className="macro-box-label" style={{ color: 'var(--primary-light)' }}><Wheat size={12} /> Carbs</span>
                   <span className="macro-box-val">{editForm.carbs_g}</span>
-                  <span className="macro-box-unit">g</span>
+                  <span className="macro-box-unit">g{portionPct < 100 ? ` (of ${baseValues.carbs_g})` : ''}</span>
                 </div>
                 <div className="macro-box">
                   <span className="macro-box-label" style={{ color: 'var(--rose)' }}><Droplet size={12} /> Fats</span>
                   <span className="macro-box-val">{editForm.fat_g}</span>
-                  <span className="macro-box-unit">g</span>
+                  <span className="macro-box-unit">g{portionPct < 100 ? ` (of ${baseValues.fat_g})` : ''}</span>
                 </div>
               </div>
 
@@ -256,7 +329,7 @@ export default function AIScannerView({ onSaveSuccess, onNavigate }) {
 
               {/* Footer Actions */}
               <div className="analysis-footer">
-                <button className="btn btn-secondary btn-sm" onClick={() => { setAnalysis(null); setImagePreview(null); }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setAnalysis(null); setImagePreview(null); setPortionPct(100); }}>
                   Scan Another Photo
                 </button>
                 <div style={{ display: 'flex', gap: '0.625rem' }}>
