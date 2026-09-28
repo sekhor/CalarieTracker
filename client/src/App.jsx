@@ -209,7 +209,6 @@ export default function App() {
             onRetry={loadDashboard}
             onNavigate={setActiveTab}
             onOpenAddModal={openAdd}
-            onSaveGoals={handleSaveGoals}
           />
         )}
         {activeTab === 'scanner' && (
@@ -228,7 +227,10 @@ export default function App() {
           <CoachChatView />
         )}
         {activeTab === 'profile' && (
-          <NutritionProfileView />
+          <NutritionProfileView
+            goals={stats?.goals}
+            onSaveGoals={handleSaveGoals}
+          />
         )}
         {activeTab === 'insights' && (
           <InsightsView />

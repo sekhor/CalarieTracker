@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Save } from 'lucide-react';
+import { ClipboardList, Save, SlidersHorizontal, Flame, Dumbbell, Wheat, Droplet } from 'lucide-react';
 import { fetchNutritionProfile, saveNutritionProfile } from '../services/api';
+
+const DEFAULT_GOALS = {
+  daily_calorie_target: 2000,
+  protein_target_g: 140,
+  carbs_target_g: 225,
+  fat_target_g: 65,
+};
 
 const DEFAULT_PROFILE = {
   age: '',
@@ -22,11 +29,59 @@ function listToText(value) {
   return Array.isArray(value) ? value.join(', ') : '';
 }
 
-export default function NutritionProfileView() {
+export default function NutritionProfileView({ goals: goalsProp, onSaveGoals }) {
+  const goals = goalsProp || DEFAULT_GOALS;
   const [form, setForm] = useState(DEFAULT_PROFILE);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
+
+  const [goalForm, setGoalForm] = useState(DEFAULT_GOALS);
+  const [isSavingGoals, setIsSavingGoals] = useState(false);
+  const [goalFeedback, setGoalFeedback] = useState({ type: '', message: '' });
+
+  useEffect(() => {
+    setGoalForm({
+      daily_calorie_target: goals.daily_calorie_target ?? DEFAULT_GOALS.daily_calorie_target,
+      protein_target_g: goals.protein_target_g ?? DEFAULT_GOALS.protein_target_g,
+      carbs_target_g: goals.carbs_target_g ?? DEFAULT_GOALS.carbs_target_g,
+      fat_target_g: goals.fat_target_g ?? DEFAULT_GOALS.fat_target_g,
+    });
+  }, [goals]);
+
+  const isGoalFormDirty = useMemo(() => (
+    Number(goalForm.daily_calorie_target) !== Number(goals.daily_calorie_target)
+    || Number(goalForm.protein_target_g) !== Number(goals.protein_target_g)
+    || Number(goalForm.carbs_target_g) !== Number(goals.carbs_target_g)
+    || Number(goalForm.fat_target_g) !== Number(goals.fat_target_g)
+  ), [goalForm, goals]);
+
+  const handleGoalChange = (field) => (event) => {
+    const { value } = event.target;
+    setGoalForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleGoalSubmit = async (event) => {
+    event.preventDefault();
+    if (!onSaveGoals) return;
+
+    setIsSavingGoals(true);
+    setGoalFeedback({ type: '', message: '' });
+
+    try {
+      await onSaveGoals({
+        daily_calorie_target: Number(goalForm.daily_calorie_target || DEFAULT_GOALS.daily_calorie_target),
+        protein_target_g: Number(goalForm.protein_target_g || DEFAULT_GOALS.protein_target_g),
+        carbs_target_g: Number(goalForm.carbs_target_g || DEFAULT_GOALS.carbs_target_g),
+        fat_target_g: Number(goalForm.fat_target_g || DEFAULT_GOALS.fat_target_g),
+      });
+      setGoalFeedback({ type: 'success', message: 'Personal nutrition goals updated.' });
+    } catch (error) {
+      setGoalFeedback({ type: 'error', message: error?.response?.data?.error || 'Unable to save your goals right now.' });
+    } finally {
+      setIsSavingGoals(false);
+    }
+  };
 
   const loadProfile = async () => {
     setIsLoading(true);
@@ -127,6 +182,89 @@ export default function NutritionProfileView() {
             <div className="profile-actions profile-form-full"><button className="btn btn-primary" type="submit" disabled={isSaving || isLoading}><Save size={15} /> {isSaving ? 'Saving...' : 'Save Profile'}</button></div>
           </form>
         </section>
+      </div>
+
+      {/* Personal Goals */}
+      <div className="glass-panel settings-goals-card">
+        <div className="settings-card-header">
+          <div className="settings-card-icon">
+            <SlidersHorizontal size={18} style={{ color: 'var(--primary-light)' }} />
+            <div>
+              <div className="section-title">Personal Goals</div>
+              <div className="text-sm text-muted">Set your own daily calories and macro targets.</div>
+            </div>
+          </div>
+          <span className="count-chip">Daily targets</span>
+        </div>
+
+        <form onSubmit={handleGoalSubmit} className="settings-form-fields">
+          <div className="settings-goals-grid">
+            <div>
+              <div className="modal-macro-label" style={{ color: 'var(--amber)' }}>
+                <Flame size={11} /> Calories
+              </div>
+              <input
+                type="number"
+                min="0"
+                value={goalForm.daily_calorie_target}
+                onChange={handleGoalChange('daily_calorie_target')}
+                className="form-input"
+              />
+            </div>
+
+            <div>
+              <div className="modal-macro-label" style={{ color: 'var(--emerald)' }}>
+                <Dumbbell size={11} /> Protein (g)
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={goalForm.protein_target_g}
+                onChange={handleGoalChange('protein_target_g')}
+                className="form-input"
+              />
+            </div>
+
+            <div>
+              <div className="modal-macro-label" style={{ color: 'var(--primary-light)' }}>
+                <Wheat size={11} /> Carbs (g)
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={goalForm.carbs_target_g}
+                onChange={handleGoalChange('carbs_target_g')}
+                className="form-input"
+              />
+            </div>
+
+            <div>
+              <div className="modal-macro-label" style={{ color: 'var(--rose)' }}>
+                <Droplet size={11} /> Fat (g)
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={goalForm.fat_target_g}
+                onChange={handleGoalChange('fat_target_g')}
+                className="form-input"
+              />
+            </div>
+          </div>
+
+          <div className="settings-goals-footer">
+            <div className={`settings-feedback ${goalFeedback.type ? `is-${goalFeedback.type}` : ''}`}>
+              {goalFeedback.message || 'Your dashboard progress rings and chart goal line will use these values.'}
+            </div>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={isSavingGoals || !isGoalFormDirty}>
+              <Save size={15} />
+              {isSavingGoals ? 'Saving...' : 'Save Goals'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
