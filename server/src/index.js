@@ -132,6 +132,27 @@ app.use('/api/insights', requireAuth, insightsRouter);
 app.use('/api/knowledge', requireAuth, knowledgeRouter);
 app.use('/api/planner', requireAuth, plannerRouter);
 
+// ─── Digital Asset Links (required for TWA / Google Play verification) ──────
+// After publishing to Google Play, replace the placeholder sha256_cert_fingerprints
+// value with the actual fingerprint printed by `bubblewrap init`.
+// See: https://developers.google.com/digital-asset-links/v1/getting-started
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  const packageName = process.env.TWA_PACKAGE_NAME || 'com.yourname.calorieai';
+  const sha256Fingerprint = process.env.TWA_SHA256_FINGERPRINT || 'REPLACE_WITH_YOUR_SHA256_FINGERPRINT';
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.json([
+    {
+      relation: ['delegate_permission/common.handle_all_urls'],
+      target: {
+        namespace: 'android_app',
+        package_name: packageName,
+        sha256_cert_fingerprints: [sha256Fingerprint],
+      },
+    },
+  ]);
+});
+
 if (hasClientBuild) {
   app.use('/assets', express.static(path.join(clientDistPath, 'assets'), {
     immutable: true,

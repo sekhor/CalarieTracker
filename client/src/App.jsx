@@ -14,6 +14,7 @@ const AnalyticsView = lazy(() => import('./views/AnalyticsView'));
 const InsightsView = lazy(() => import('./views/InsightsView'));
 const KnowledgeView = lazy(() => import('./views/KnowledgeView'));
 const PlannerView = lazy(() => import('./views/PlannerView'));
+const PrivacyPolicyView = lazy(() => import('./views/PrivacyPolicyView'));
 
 import {
   fetchDashboardStats,
@@ -43,6 +44,19 @@ export default function App() {
   const [editingMeal, setEditingMeal] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const { canInstall, promptInstall } = useInstallPrompt();
+
+  // Handle shortcut deep-links from the PWA manifest shortcuts
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    const tab    = params.get('tab');
+    if (action === 'add-meal') {
+      setEditingMeal(null);
+      setModalOpen(true);
+    } else if (tab) {
+      setActiveTab(tab);
+    }
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     setDashboardLoading(true);
@@ -254,11 +268,21 @@ export default function App() {
         {activeTab === 'analytics' && (
           <AnalyticsView stats={stats} />
         )}
+        {activeTab === 'privacy' && (
+          <PrivacyPolicyView />
+        )}
         </Suspense>
       </main>
 
       <footer className="app-footer">
-        CalorieAI &bull; React · Node.js
+        CalorieAI &bull; React · Node.js &bull;{' '}
+        <button
+          type="button"
+          onClick={() => setActiveTab('privacy')}
+          style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', padding: 0, font: 'inherit' }}
+        >
+          Privacy Policy
+        </button>
       </footer>
 
       {isModalOpen ? (

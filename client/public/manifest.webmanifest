@@ -1,33 +1,88 @@
 {
+  "id": "/",
   "name": "CalorieAI",
   "short_name": "CalorieAI",
   "description": "AI-powered calorie tracking with meal logging, nutrition analytics, and mobile-friendly install support.",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#0b0f19",
   "theme_color": "#0b0f19",
   "lang": "en",
+  "dir": "ltr",
   "categories": ["health", "lifestyle", "productivity"],
   "icons": [
     {
       "src": "/pwa-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/pwa-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/favicon.svg",
-      "sizes": "48x46",
+      "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     }
-  ]
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/screenshot-dashboard.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Dashboard — daily calorie summary"
+    },
+    {
+      "src": "/screenshots/screenshot-scanner.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "AI Scanner — identify food from a photo"
+    },
+    {
+      "src": "/screenshots/screenshot-log.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Meal Log — full history with macros"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Log a Meal",
+      "short_name": "Log Meal",
+      "description": "Quickly add a new meal entry",
+      "url": "/?action=add-meal&source=shortcut",
+      "icons": [{ "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "AI Scanner",
+      "short_name": "Scanner",
+      "description": "Scan food with AI",
+      "url": "/?tab=scanner&source=shortcut",
+      "icons": [{ "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "prefer_related_applications": false
 }

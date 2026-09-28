@@ -1,0 +1,68 @@
+// ============================================================
+// Bubblewrap configuration for CalorieAI TWA
+// Generated for: https://calarie-api.azurewebsites.net
+//
+// SETUP STEPS:
+//   1. npm install -g @bubblewrap/cli
+//   2. bubblewrap init --manifest https://calarie-api.azurewebsites.net/manifest.webmanifest
+//      (This auto-generates twa-manifest.json from the live URL)
+//   3. bubblewrap build
+//      (Produces app-release-bundle.aab for Google Play upload)
+//
+// AFTER bubblewrap init COMPLETES:
+//   - Copy the SHA-256 fingerprint it prints
+//   - Set TWA_SHA256_FINGERPRINT in Azure App Service → Configuration → App Settings
+//   - Set TWA_PACKAGE_NAME=com.calorieai.app in the same place
+//   - Redeploy server (or just save — Azure restarts automatically)
+//   - Verify: https://calarie-api.azurewebsites.net/.well-known/assetlinks.json
+// ============================================================
+
+{
+  "packageId": "com.calorieai.app",
+  "host": "calarie-api.azurewebsites.net",
+  "name": "CalorieAI",
+  "launcherName": "CalorieAI",
+  "display": "standalone",
+  "themeColor": "#0b0f19",
+  "navigationColor": "#0b0f19",
+  "navigationColorDark": "#0b0f19",
+  "navigationDividerColor": "#0b0f19",
+  "navigationDividerColorDark": "#0b0f19",
+  "backgroundColor": "#0b0f19",
+  "enableNotifications": false,
+  "startUrl": "/?source=pwa",
+  "iconUrl": "https://calarie-api.azurewebsites.net/pwa-512.png",
+  "maskableIconUrl": "https://calarie-api.azurewebsites.net/pwa-512.png",
+  "monochromeIconUrl": "https://calarie-api.azurewebsites.net/pwa-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "calorieai"
+  },
+  "appVersionCode": 1,
+  "appVersionName": "1.0.0",
+  "shortcuts": [
+    {
+      "name": "Log a Meal",
+      "shortName": "Log Meal",
+      "url": "/?action=add-meal&source=shortcut",
+      "chooseIconDialog": false,
+      "iconUrl": "https://calarie-api.azurewebsites.net/pwa-192.png"
+    },
+    {
+      "name": "AI Scanner",
+      "shortName": "Scanner",
+      "url": "/?tab=scanner&source=shortcut",
+      "chooseIconDialog": false,
+      "iconUrl": "https://calarie-api.azurewebsites.net/pwa-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://calarie-api.azurewebsites.net/manifest.webmanifest",
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://calarie-api.azurewebsites.net/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": []
+}

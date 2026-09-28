@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Splash screen drawable for the TWA.
+  Replace this with your actual splash screen drawable or use
+  @mipmap/ic_launcher as the src once launcher icons are generated.
+  Bubblewrap auto-generates this from your pwa-512.png icon.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#0b0f19" />
+        </shape>
+    </item>
+</layer-list>

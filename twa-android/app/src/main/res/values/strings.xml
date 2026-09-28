@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CalorieAI</string>
+    <string name="asset_statements">
+        [{
+            \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+            \"target\": {
+                \"namespace\": \"android_app\",
+                \"package_name\": \"com.calorieai.app\",
+                \"sha256_cert_fingerprints\": [\"REPLACE_WITH_YOUR_SHA256_FINGERPRINT\"]
+            }
+        }]
+    </string>
+</resources>

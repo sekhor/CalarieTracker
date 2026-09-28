@@ -61,3 +61,13 @@ coverage/
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+
+# TWA Android — never commit keystores or build outputs
+twa-android/android.keystore
+twa-android/*.jks
+twa-android/*.p12
+twa-android/app/build/
+twa-android/build/
+twa-android/.gradle/
+twa-android/local.properties
+

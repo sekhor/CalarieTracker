@@ -1,0 +1,15 @@
+# TWA Android project — generated keystore (never commit)
+android.keystore
+*.jks
+*.p12
+
+# Android build outputs
+app/build/
+build/
+.gradle/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
